@@ -1,0 +1,113 @@
+https://micropython.org/download/M5STACK_ATOM/
+
+Program your board using the esptool.py program
+
+If you are putting MicroPython on your board for the first time then you should first erase the entire flash using:
+
+esptool.py --chip esp32 --port /dev/ttyUSB0 erase_flash
+
+From then on program the firmware starting at address 0x1000:
+
+esptool.py --chip esp32 --port /dev/ttyUSB0 --baud 115200 write_flash -z 0x1000 <file>.bin
+
+
+-------------------
+m5stack stuff:
+https://docs.m5stack.com/en/mpy/official/machine
+
+
+-------------------
+
+ulab (numpy clone) is at https://github.com/v923z/micropython-builder/releases
+
+
+--------------------
+install packages:
+mpremote mip install aioble
+
+run programs:
+mpremote run <prog.py>
+-------------------
+stamp c3u
+see also https://github.com/gandro/micropython-m5stamp-c3u
+https://micropython.org/download/ESP32_GENERIC_C3/
+
+
+Program your board using the esptool.py
+
+If you are putting MicroPython on your board for the first time then you should first erase the entire flash using:
+
+esptool.py --chip esp32c3 --port /dev/ttyUSB0 erase_flash
+
+From then on program the firmware starting at address 0x0:
+
+esptool.py --chip esp32c3 --port /dev/ttyUSB0 --baud 115200 write_flash -z 0x0 esp32c3-20220117-v1.18.bin
+
+
+---------------
+default micropython for atom matrix:
+
+install from https://micropython.org/download/M5STACK_ATOM/
+
+module code at: https://github.com/micropython/micropython/blob/master/ports/esp32/boards/M5STACK_ATOM/modules/atom.py
+
+use Matrix module like so:
+
+
+from atom import Matrix
+cpu = Matrix()
+cpu.get_button_status()
+cpu.set_pixels_color(10,10,0)
+cpu.set_pixel_color(10,0,10,0)
+
+defines for internal I2C: 
+# I2C
+I2C0_SCL_PIN = const(21)
+I2C0_SDA_PIN = const(25)
+
+defines for grove port
+# Grove port
+GROVE_PORT_PIN = (const(26), const(32))
+SCL is 32, SDA is 26 on grove peripherals
+
+
+also handles button click and callback.
+
+------------
+bluetooth, check https://github.com/Carglglz/upyble/tree/master
+
+
+------------
+
+check https://github.com/mcauser/awesome-micropython#ai
+    https://github.com/mcauser/awesome-micropython#sensors
+
+sensors
+bps: https://pypi.org/project/bmp-280/
+    https://github.com/feyzikesim/bmp280/blob/master/bmp_280/bmp_280.py
+    https://github.com/dafvid/micropython-bmp280
+
+
+imu: https://pypi.org/project/micropython-mpu6886/
+    https://github.com/tuupola/micropython-mpu6886
+
+tvoc: https://github.com/pimoroni/sgp30-python/tree/master/library
+    https://github.com/alexmrqt/micropython-sgp30
+    https://github.com/adafruit/Adafruit_CircuitPython_SGP30/blob/main/adafruit_sgp30.py
+
+
+co2: (real):
+        https://github.com/agners/micropython-scd30
+
+
+atom-s3 lcd: check https://github.com/m5stack/M5GFX
+128*128 pixel 
+maybe here:
+    https://github.com/favnec5/micropython-esp32-spi-sdcard-and-screen-driver
+    https://github.com/lvgl/lv_micropython
+    https://github.com/lvgl/lv_binding_micropython/blob/master/driver/esp32/ili9XXX.py
+    https://forum.micropython.org/viewtopic.php?f=18&t=9368&start=20
+    https://github.com/lvgl/lv_micropython
+    https://github.com/tuupola/micropython-ili934x
+
+    https://docs.m5stack.com/en/mpy/display/m5stack_lvgl

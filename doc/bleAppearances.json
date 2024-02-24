@@ -1,0 +1,35 @@
+{
+    "appearances": [
+      {"value": 0, "description": "Unknown"},
+      {"value": 64, "description": "Generic Phone"},
+      {"value": 128, "description": "Generic Computer"},
+      {"value": 192, "description": "Generic Watch"},
+      {"value": 256, "description": "Watch: Sports Watch"},
+      {"value": 320, "description": "Generic Clock"},
+      {"value": 384, "description": "Generic Display"},
+      {"value": 448, "description": "Generic Remote Control"},
+      {"value": 512, "description": "Generic Eye-glasses"},
+      {"value": 576, "description": "Generic Tag"},
+      {"value": 640, "description": "Generic Keyring"},
+      {"value": 704, "description": "Generic Media Player"},
+      {"value": 768, "description": "Generic Barcode Scanner"},
+      {"value": 832, "description": "Generic Thermometer"},
+      {"value": 896, "description": "Thermometer: Ear"},
+      {"value": 960, "description": "Generic Heart rate Sensor"},
+      {"value": 1024, "description": "Heart Rate Sensor: Heart Rate Belt"},
+      {"value": 1088, "description": "Generic Blood Pressure"},
+      {"value": 1152, "description": "Blood Pressure: Arm"},
+      {"value": 1216, "description": "Blood Pressure: Wrist"},
+      {"value": 1280, "description": "Human Interface Device (HID)"},
+      {"value": 1344, "description": "Keyboard"},
+      {"value": 1408, "description": "Mouse"},
+      {"value": 1472, "description": "Joystick"},
+      {"value": 1536, "description": "Gamepad"},
+      {"value": 1600, "description": "Digitizer Tablet"},
+      {"value": 1664, "description": "Card Reader"},
+      {"value": 1728, "description": "Digital Pen"},
+      {"value": 1792, "description": "Barcode Scanner"}
+      // ... and so on for other standard appearances
+    ]
+  }
+  
