@@ -41,20 +41,20 @@ for p in _ioMap["motor"]:
 print("Motor setting:",motor)
 
 #### globals for motor
-numMotors = len(motor) // 2
+_numMotors = micropython.const(len(motor) // 2)
 _motorSteps = micropython.const(5)
-_motorCtl = bytearray([-128]*numMotors) # -(steps)..0..(steps)
-_motorCtlShadow = bytearray(numMotors) # local copy within isr/scheduled task
+_motorCtl = bytearray([-128]*_numMotors) # -(steps)..0..(steps)
+_motorCtlShadow = bytearray(_numMotors) # local copy within isr/scheduled task
 _motorSlot = bytearray([1]) # start with 1
 
 # isr: copy motorCtl to schadow, then schedule output task
 def motorDriver(slot: int):
-    global _motorCtlShadow, _motorSlot, motor, numMotors
+    global _motorCtlShadow, _motorSlot, motor, _numMotors
     """ Set all motor IO pins from motorCtlShadow according to current slot"""
-    fmt = "b"*numMotors
+    fmt = "b"*_numMotors
     ctl = struct.unpack(fmt,_motorCtlShadow)
     #print(ctl)
-    for idx in range (numMotors):
+    for idx in range (_numMotors):
         m = ctl[idx]
         #print(m)
         if m == 0:
@@ -101,5 +101,3 @@ _motorTimerPeriod = micropython.const(20) # ms period
 
 motorTimer = machine.Timer(_motorTimerId)
 motorTimer.init(period=_motorTimerPeriod, mode=machine.Timer.PERIODIC, callback=lambda t:motorIsr())
-
-
