@@ -1,0 +1,1 @@
+{"id": "6055f957bf5c", "os": {"release": "1.22.1", "machine": "ESP32C3 module with ESP32C3"}, "model": "stampc3u", "io": {"led": 2, "btn": 9, "motor": [3, 4, 5, 6]}, "wlan": {"addr": "6055f957bf5c"}, "device": 2, "ble": {"key": "123321", "addr": "6055f957bf5e"}}
