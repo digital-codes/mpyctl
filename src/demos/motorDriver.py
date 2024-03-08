@@ -70,7 +70,7 @@ def setHigh(mot):
     global motor
     if motor[mot]["mode"] == "pwm":
         motor[mot]["pin"].deinit()
-        machine.Pin(motor[mot]["io"],machine["pin"].OUT,value=1)
+        machine.Pin(motor[mot]["io"],machine.Pin.OUT,value=1)
         motor[mot]["mode"] = "high"
 
 
@@ -88,34 +88,36 @@ def motorDrive(midx,value,brk=True):
         motor[midx*2+1]["pin"].duty(0)
     elif value == -128:
         # free
-        setPwm(midx*2)
-        motor[midx*2]["pin"].duty(1023)
-        setPwm(midx*2+1)
-        motor[midx*2+1]["pin"].duty(1023)
+        setHigh(midx*2)
+        setHigh(midx*2+1)
     elif abs(value > 10):
         print("Invalid value")
         return
     elif value < 0:
         # reverse
         if brk:
+            setPwm(midx*2)
             motor[midx*2]["pin"].duty(0)
         else:
-            motor[midx*2]["pin"].duty(1023)
+            setHigh(midx*2)
+        setPwm(midx*2+1)
         motor[midx*2+1]["pin"].duty(int(abs(value) / 10 * 1023))
     else:
         # forward
+        setPwm(midx*2)
         motor[midx*2]["pin"].duty(int(abs(value) / 10 * 1023))
         if brk:
+            setPwm(midx*2+1)
             motor[midx*2+1]["pin"].duty(0)
         else:
-            motor[midx*2+1]["pin"].duty(1023)
+            setHigh(midx*2+1)
 
 
 ##########
 #p = machine.PWM(3,freq=1000,duty=500)
 #p.deinit()
-#p = machine.Pin(3,machine["pin"].OUT,value=1)
-#p = machine.Pin(3,machine["pin"].OUT,value=0)
+#p = machine.Pin(3,machine.Pin.OUT,value=1)
+#p = machine.Pin(3,machine.Pin.OUT,value=0)
 #p = machine.PWM(3,freq=1000,duty=500)
 ###########
 
