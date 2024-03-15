@@ -4,13 +4,17 @@ import machine
 import os
 import network
 import bluetooth
+import hashlib
+import random
 
+_SALT = f"{random.randint(100000,999999):06}"
 _CONF_FILE = "config.json"
 
 def generate_key(mac_address):
     """Generate a 6-digit key from a MAC address."""
-    key = int(mac_address, 16)
-    key = key % 1_000_000  # Get the last 6 digits
+    code = "".join([mac_address,_SALT])
+    hash = hashlib.sha256(code.encode()).digest().hex()
+    key = str(int(hash, 16))[-6:] # Get the last 6 digits
     return f"{key:06}"  # Pad with zeros if necessary
 
 files = os.listdir("/")
