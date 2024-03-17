@@ -32,6 +32,20 @@ ble = bluetooth.BLE()
 if not ble.active():
     ble.active(True)
 
+
+_IO_CAPABILITY_DISPLAY_ONLY = const(0)
+_IO_CAPABILITY_DISPLAY_YESNO = const(1)
+_IO_CAPABILITY_KEYBOARD_ONLY = const(2)
+_IO_CAPABILITY_NO_INPUT_OUTPUT = const(3)
+_IO_CAPABILITY_KEYBOARD_DISPLAY = const(4)
+
+# test security features
+# ble.config(bond=True,io=_IO_CAPABILITY_DISPLAY_ONLY,le_secure=True)
+# bond=True,io=0,le_secure=True  prompts for pin when run from host application
+# however, this seem to be not processed by aioble
+ble.config(bond=True,io=_IO_CAPABILITY_NO_INPUT_OUTPUT,le_secure=True)
+useValidation = True
+
 mac = ble.config("mac")
 device_address = mac[1]
 
@@ -314,6 +328,7 @@ async def peripheral_task():
     global currentConnection
     global validation_timer
     global pair_value
+    global useValidation
     validation_timer = machine.Timer(-1)
     print("Start adv")
     while True:
@@ -336,7 +351,8 @@ async def peripheral_task():
                 #currentDevice = connection.device
 
                 # Start a timer for client ID validation
-                validation_timer.init(mode=machine.Timer.ONE_SHOT, period=10000, callback=on_validation_timer)
+                if useValidation:
+                    validation_timer.init(mode=machine.Timer.ONE_SHOT, period=10000, callback=on_validation_timer)
                 # clear timer if authenticated like:
                 # validation_timer.deinit()  
 
