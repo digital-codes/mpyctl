@@ -17,6 +17,8 @@ import machine
 def rgbFill(color):
     return
 
+# pairing timer
+validation_timer = None
 
 # connected stated
 connected = False
@@ -133,6 +135,16 @@ print("SENSE",ENV_CTL_UUID)
 ENV_CTL_OUT_UUID = bluetooth.UUID(0x2A56)
 print("TEMP",ENV_CTL_OUT_UUID)
 
+# device config characteristics within device information service
+# creating uuid from long string tricky ...
+def mkUuidFromString(s):
+    a = s.replace('-', '')
+    b = bytes.fromhex(a)
+    c = bytes(b[i] for i in range(len(b) - 1, -1, -1))
+    return bluetooth.UUID(c)
+
+DEVICE_CONFIG_RD = mkUuidFromString("19e2282a-0777-4519-9d08-9bc983c3a7d0")
+DEVICE_PAIR = mkUuidFromString("bda7b898-782a-4a50-8d10-79d897ea82c2")
 
 # org.bluetooth.characteristic.gap.appearance.xml
 #_ADV_APPEARANCE_GENERIC_THERMOMETER = const(768)
@@ -173,12 +185,19 @@ mdl_characteristic = aioble.Characteristic(
 mdl_name = "MpyCtl"
 mdl_characteristic.write(mdl_name.encode())
 
-sno_characteristic = aioble.Characteristic(
-    info_service, bluetooth.UUID(0x2A25), read=True, notify=False
+# add config characterisitcs 
+cfg_characteristic = aioble.Characteristic(
+    info_service, DEVICE_CONFIG_RD, read=True, write=False, notify=False
 )
-sno_name = "1234"
-sno_characteristic.write(sno_name.encode())
+cfg_value = bytearray([0,1,2,3,4,5,6,7,8,9])
+cfg_characteristic.write(cfg_value)
 
+# capture must be true in order to get data!!!
+pair_characteristic = aioble.Characteristic(
+    info_service, DEVICE_PAIR, read=True, write=True, notify=False, capture=True
+)
+pair_value = bytearray([0,0,0,0,0,0])
+pair_characteristic.write(pair_value)
 
 
 aioble.register_services(temp_service,ctl_service,info_service)
@@ -200,7 +219,7 @@ async def sensor_task():
     print("Start sense")
     t = 24.5
     while True:
-        if connected:
+        if connected and authorized:
             print("Temp",t)
             try:
                 temp_characteristic.write(_encode_temperature(t))
@@ -217,29 +236,59 @@ async def ctl_task():
     global connected
     print("Start ctl")
     while True:
-        if connected:
+        if connected and authorized:
             try:
                 conn, _value = await ctl_characteristic.written()
+                value = _decode_ctl(_value)[0]
+                print("Received:",conn, value)
+                if value == 1:  # Check if the value is 1 (on)
+                    # Code to turn the light on
+                    print("ON")
+                    rgbFill((0,100,0))
+                elif value == 0:  # Check if the value is 0 (off)
+                    # Code to turn the light off
+                    print("OFF")
+                    rgbFill((0,0,30))
+                else:
+                    print("else")
+                    rgbFill((100,0,0))
             except:
                 print("ctl error")
                 await asyncio.sleep_ms(100)
-                continue
 
-            value = _decode_ctl(_value)[0]
-            print("Received:",conn, value)
-            if value == 1:  # Check if the value is 1 (on)
-                # Code to turn the light on
-                print("ON")
-                rgbFill((0,100,0))
-            elif value == 0:  # Check if the value is 0 (off)
-                # Code to turn the light off
-                print("OFF")
-                rgbFill((0,0,30))
-            else:
-                print("else")
-                rgbFill((100,0,0))
         else:
-            await asyncio.sleep_ms(1000)
+            await asyncio.sleep_ms(100)
+
+async def pair_task():
+    global connected
+    global authorized
+    global validation_timer
+    print("Start pair")
+    bleKey = bytearray([1,2,3,3,2,1])
+    while True:
+        if connected:
+            try:
+                conn, _value = await pair_characteristic.written()
+                print("Pair received:",conn,_value)
+                if len(_value) != 6:
+                    raise ValueError("Invalid pair value")
+                for i,v in enumerate(_value):
+                    if v != bleKey[i]:
+                        raise ValueError("Invalid pair value")
+                print("Pair OK")
+                validation_timer.deinit()
+                authorized = True
+            except Exception as e:
+                #print("Error occurred:", e)
+                #print("Error type:", type(e))
+                #print("Error arguments:", e.args)
+                print("pair error")
+                authorized = False
+                pair_characteristic.write(pair_value) # clear key
+                await asyncio.sleep_ms(100)
+
+        else:
+            await asyncio.sleep_ms(100)
 
 
 def on_validation_timer(timer):
@@ -248,6 +297,7 @@ def on_validation_timer(timer):
 
 async def disconnect_device():
     global connected
+    global authorized
     global currentConnection
     if connected:
         #print("Disconnecting:",currentConnection)
@@ -255,11 +305,15 @@ async def disconnect_device():
         #print("Disconnect complete")
 
 
+
 # Serially wait for connections. Don't advertise while a central is
 # connected.
 async def peripheral_task():
     global connected
+    global authorized
     global currentConnection
+    global validation_timer
+    global pair_value
     validation_timer = machine.Timer(-1)
     print("Start adv")
     while True:
@@ -282,15 +336,16 @@ async def peripheral_task():
                 #currentDevice = connection.device
 
                 # Start a timer for client ID validation
-                validation_timer.init(mode=machine.Timer.ONE_SHOT, period=5000, callback=on_validation_timer)
+                validation_timer.init(mode=machine.Timer.ONE_SHOT, period=10000, callback=on_validation_timer)
                 # clear timer if authenticated like:
                 # validation_timer.deinit()  
-
 
                 await connection.disconnected(timeout_ms=None)
                 print("Disconnected 1")
                 connected = False
+                authorized = False
                 currentConnection = None
+                pair_characteristic.write(pair_value) # clear key
                 rgbFill((10,10,10))
         except:
             print("argh ...")
@@ -302,10 +357,11 @@ async def main():
     t1 = asyncio.create_task(sensor_task())
     t2 = asyncio.create_task(ctl_task())
     t3 = asyncio.create_task(peripheral_task())
+    t4 = asyncio.create_task(pair_task())
     # await asyncio.gather(t1, t2, t3)
 
     try:
-        await asyncio.gather(t1, t2, t3)
+        await asyncio.gather(t1, t2, t3,t4)
 
     except asyncio.TimeoutError:
         print("Timeout in main:")
