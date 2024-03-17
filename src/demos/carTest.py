@@ -1,6 +1,7 @@
 import sys
 
 sys.path.append("")
+sys.path.append("/lib/mpu9/")
 
 from micropython import const as constant
 
@@ -11,6 +12,13 @@ import os
 
 import machine
 import neopixel
+
+import struct
+import time
+
+# https://github.com/micropython-IMU
+# modified for custom i2c in imu.py
+from  mpu9.mpu9150 import MPU9150
 
 
 # activate ble first
@@ -32,7 +40,7 @@ else:
         "device":-1,
         "btn":0,
         "led":-1,
-        "i2c":[14,27], # clock first. to be checked
+        "i2c":[14,27,33,25], # clock first. to be checked. 33/25 is for imu
         "motor":[23,22,21,5,16,4,18,19] # 2 pins per motor. pin 3 not OK, use 5 instead
         #"motor":[4,16,18,19,21,5,22,23], # 2 pins per motor. pin 3 not OK, use 5 instead
     }
@@ -179,3 +187,30 @@ def motorDrive(midx,value,brk=True):
 #p = machine.PWM(3,freq=1000,duty=500)
 ###########
 
+# imu setup
+imuI2c = machine.I2C(0,scl=machine.Pin(33),sda=machine.Pin(25),freq=400000)
+imu = MPU9150(imuI2c)
+imu.accel_range = 0
+imu.gyro_range = 0
+imu.filter_range = 2 # ~100hz
+
+
+imuBuf = bytearray(2*10)
+for i in range(10):
+    ia = imu.accel.xyz
+    ig = imu.gyro.xyz
+    im = imu.mag.xyz
+    it = [imu.temperature]
+
+    j = 0
+    for val in [ia,ig,im,it]:
+        for k in range(len(val)):
+            int_value = int(val[k] * 100)
+            struct.pack_into('>h', imuBuf, 2*j, int_value)
+            j += 1
+    print(imuBuf.hex())
+
+    time.sleep(.3)
+
+
+    
