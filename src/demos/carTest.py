@@ -1,7 +1,6 @@
 import sys
 
 sys.path.append("")
-sys.path.append("/lib/mpu9/")
 
 from micropython import const as constant
 
@@ -18,6 +17,7 @@ import time
 
 # https://github.com/micropython-IMU
 # modified for custom i2c in imu.py
+sys.path.append("/lib/mpu9/")
 from  mpu9.mpu9150 import MPU9150
 
 
@@ -113,9 +113,7 @@ print("Motor setting:",motor)
 ##### globals for motor
 _motorSteps = constant(10)
 _numMotors = constant(len(motor) // 2)
-_motorCtl = bytearray([-128]*_numMotors) # -(steps)..0..(steps)
-_motorCtlShadow = bytearray(_numMotors) # local copy within isr/scheduled task
-_motorSlot = bytearray([1]) # start with 1
+motorSpeed = bytearray([0]*_numMotors) # we store the driving values here
 
 ##### we use PWM channels for motor
 # a static "1" cannot be (reliably?) set via PWM
@@ -194,8 +192,8 @@ imu.accel_range = 0
 imu.gyro_range = 0
 imu.filter_range = 2 # ~100hz
 
-
-imuBuf = bytearray(2*10)
+# car data is sensor values plus speed values 
+carData = bytearray([0]*(2*10 + len(motorSpeed)))
 for i in range(10):
     ia = imu.accel.xyz
     ig = imu.gyro.xyz
@@ -203,12 +201,16 @@ for i in range(10):
     it = [imu.temperature]
 
     j = 0
+    # set sensor values, 2 byte each
     for val in [ia,ig,im,it]:
         for k in range(len(val)):
             int_value = int(val[k] * 100)
-            struct.pack_into('>h', imuBuf, 2*j, int_value)
+            struct.pack_into('>h', carData, 2*j, int_value)
             j += 1
-    print(imuBuf.hex())
+    for k,m in enumerate(motorSpeed):
+        struct.pack_into('>b', carData, 2*j+k, m)
+
+    print(carData.hex())
 
     time.sleep(.3)
 
