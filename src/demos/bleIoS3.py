@@ -43,7 +43,7 @@ _IO_CAPABILITY_KEYBOARD_DISPLAY = const(4)
 # ble.config(bond=True,io=_IO_CAPABILITY_DISPLAY_ONLY,le_secure=True)
 # bond=True,io=0,le_secure=True  prompts for pin when run from host application
 # however, this seem to be not processed by aioble
-ble.config(bond=True,io=_IO_CAPABILITY_NO_INPUT_OUTPUT,le_secure=True)
+#ble.config(bond=True,io=_IO_CAPABILITY_NO_INPUT_OUTPUT,le_secure=True)
 useValidation = True
 
 mac = ble.config("mac")

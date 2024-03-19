@@ -69,5 +69,33 @@ print(f"DEC: {decoded.hex()}")
 decoded_pin = int.from_bytes(decoded[:6],"big")
 print(f"DPIN: {decoded_pin}")
 
+######################################
+# partially random iv
+iv_fix_ = [1,2,3,4,1,2,3,4]
+ivPart_ = [random.randint(0,256) for i in range(8)]
 
+iv = bytearray(iv_fix_ + ivPart_)
+print(f"IV: {iv.hex()}")
 
+fwd = cryptolib.aes(key1,mode,iv)
+bwd = cryptolib.aes(key1,mode,iv)
+
+pin = random.getrandbits(8*msgBytes) % 1000000
+print(f"PIN: {pin}")
+
+# need to generate 16 byte message for encryption (padding)
+# standard pkcs7 padding ?
+msg = pin.to_bytes(msgBytes,"big") + bytes([16 - msgBytes]*(16 - msgBytes))
+print(f"MSG: {msg.hex()}")
+
+encoded = fwd.encrypt(msg)
+print(f"ENC: {encoded.hex()}")
+
+decoded = bwd.decrypt(encoded)
+print(f"DEC: {decoded.hex()}")
+
+# verify. strip of padding
+decoded_pin = int.from_bytes(decoded[:msgBytes],"big")
+print(f"DPIN: {decoded_pin}")
+
+print(f"Result: {pin == decoded_pin}")
