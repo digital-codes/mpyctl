@@ -8,17 +8,91 @@ import uasyncio as asyncio
 import aioble
 import bluetooth
 
+import cryptolib
 import random
 import struct
 
 import machine
+import json
+import os
 
 # works for matrix and lite
 def rgbFill(color):
     return
 
-# pairing timer
+
+# config stuff
+_CONF_FILE = "config.json"
+files = os.listdir("/")
+if _CONF_FILE in files:
+    with open(_CONF_FILE) as f:
+        cfdata = json.load(f)
+else:
+    raise BaseException("No Config")        
+
+# verify id
+if machine.unique_id().hex() != cfdata["id"]:
+    raise BaseException("Invalid ID")        
+
+# get ble key
+bleKey = cfdata["ble"]["key"]
+print("blekey:",bleKey)
+_ivBase = bytearray([0]*8) # first half of iv
+_cryptMode = 2 # CBC
+
+
+# pairing stuff
 validation_timer = None
+_msgBytes = const(4)
+pair_value = bytearray()
+def genChallenge():
+    global pair_value
+    """create new random challenge with 4 digits"""
+    pin = random.getrandbits(8*_msgBytes) # micropython max is 32 bit
+    pair_value = pin.to_bytes(_msgBytes,"big")
+
+def verifyResponse(resp):
+    global bleKey, _ivBase, _cryptMode
+    global pair_value
+    """verify response data. expect 16byte encrpyted msg followed by 8 byte iv part"""
+    ivPart = resp[-8:]
+    iv = bytearray(_ivBase + ivPart)
+    print(f"IV: {iv.hex()}")
+    crypt = cryptolib.aes(bleKey,_cryptMode,iv)
+    msg = crypt.decrypt(resp[:16])[:_msgBytes]
+    print(f"DEC: {msg}, {msg.hex()}")
+    print(f"PIN: {pair_value}, {pair_value.hex()}")
+    return msg.hex() == pair_value.hex()
+
+def testChallenge():
+    genChallenge()
+    pin = pair_value
+    print(f"PIN: {pin}")
+
+    ivPart_ = bytearray([random.randint(0,256) for i in range(8)])
+    print(f"IVpart: {ivPart_.hex()}")
+    print(f"IVbase: {_ivBase.hex()}")
+
+    iv = _ivBase + ivPart_
+    print(f"IV: {iv.hex()}")
+
+    fwd = cryptolib.aes(bleKey,_cryptMode,iv)
+
+    # need to generate 16 byte message for encryption (padding)
+    # standard pkcs7 padding ?
+    msg = pin + bytes([16 - _msgBytes]*(16 - _msgBytes))
+    print(f"MSG: {msg.hex()}")
+
+    encoded = fwd.encrypt(msg)
+    print(f"ENC: {encoded.hex()}")
+
+    response = encoded + ivPart_
+    print(f"RESP: {response.hex()}")
+
+    print(verifyResponse(response))
+
+testChallenge()
+
 
 # connected stated
 connected = False
@@ -43,7 +117,7 @@ _IO_CAPABILITY_KEYBOARD_DISPLAY = const(4)
 # ble.config(bond=True,io=_IO_CAPABILITY_DISPLAY_ONLY,le_secure=True)
 # bond=True,io=0,le_secure=True  prompts for pin when run from host application
 # however, this seem to be not processed by aioble
-#ble.config(bond=True,io=_IO_CAPABILITY_NO_INPUT_OUTPUT,le_secure=True)
+# ble.config(bond=True,io=_IO_CAPABILITY_NO_INPUT_OUTPUT,le_secure=True)
 useValidation = True
 
 mac = ble.config("mac")
@@ -210,7 +284,7 @@ cfg_characteristic.write(cfg_value)
 pair_characteristic = aioble.Characteristic(
     info_service, DEVICE_PAIR, read=True, write=True, notify=False, capture=True
 )
-pair_value = bytearray([0,0,0,0,0,0])
+pair_value = genChallenge()
 pair_characteristic.write(pair_value)
 
 
@@ -284,20 +358,19 @@ async def pair_task():
             try:
                 conn, _value = await pair_characteristic.written()
                 print("Pair received:",conn,_value)
-                if len(_value) != 6:
-                    raise ValueError("Invalid pair value")
-                for i,v in enumerate(_value):
-                    if v != bleKey[i]:
-                        raise ValueError("Invalid pair value")
-                print("Pair OK")
-                validation_timer.deinit()
-                authorized = True
+                if verifyResponse(_value):
+                    print("Pair OK")
+                    validation_timer.deinit()
+                    authorized = True
+                else:
+                    print("Pair failed")
             except Exception as e:
                 #print("Error occurred:", e)
                 #print("Error type:", type(e))
                 #print("Error arguments:", e.args)
                 print("pair error")
                 authorized = False
+                genChallenge() # updates pair_value
                 pair_characteristic.write(pair_value) # clear key
                 await asyncio.sleep_ms(100)
 
@@ -361,7 +434,9 @@ async def peripheral_task():
                 connected = False
                 authorized = False
                 currentConnection = None
+                genChallenge()
                 pair_characteristic.write(pair_value) # clear key
+                asyncio.sleep_ms(10)
                 rgbFill((10,10,10))
         except:
             print("argh ...")

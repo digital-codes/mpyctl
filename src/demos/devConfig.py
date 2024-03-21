@@ -7,36 +7,27 @@ import machine
 import os
 import network
 import bluetooth
-import random
 
 _CONF_FILE = "config.json"
-
-def generate_key(mac_address):
-    """Generate a 16-byte random key"""
-    rawKey = bytearray(16)
-    for i in range(0, 16, 4):
-        rawKey[i:i+4] = random.getrandbits(32).to_bytes(4,"big")
-    key = rawKey.hex()
-    # reverse: bytes.fromhex(key)
-    return key
 
 class Config:
     def __init__(self, data=None):
         self.dirty = True # true if the config has been modified
+        b = bluetooth.BLE()
+        b.active(1)
+        bmac = b.config("mac")[1].hex()
+        w = network.WLAN()
+        # allways set os
+        o = os.uname()
+        self.os = {"release": o.release, "machine": o.machine}
         if data == None:    
             self.io = {}  # no default io definition
             self.device = -1  # no default device
             self.model = ""  # no default model
             self.setting = -1  # no default settings
             self.id = machine.unique_id().hex()
-            o = os.uname()
-            self.os = {"release": o.release, "machine": o.machine}
-            b = bluetooth.BLE()
-            b.active(1)
             bmac = b.config("mac")[1].hex()
-            bkey = generate_key(bmac)
-            self.ble = {"key": bkey, "addr": bmac}
-            w = network.WLAN()
+            self.ble = {"key": "", "pin":0, "addr": bmac}
             self.wlan = {"addr": w.config("mac").hex()}
         elif isinstance(data, dict):
             self.io = data.get('io')
@@ -45,15 +36,13 @@ class Config:
             if data.get('id', "") == machine.unique_id().hex():
                 self.dirty = False
                 self.id = data.get('id')
-                self.os = data.get('os')
                 self.ble = data.get('ble')
                 self.wlan = data.get('wlan')
                 self.setting = data.get('setting')
             else:
                 self.id = machine.unique_id().hex()
-                self.os = {"release": os.uname().release, "machine": os.uname().machine}
-                self.ble = {"key": generate_key(bluetooth.BLE().config("mac")[1].hex()), "addr": bluetooth.BLE().config("mac")[1].hex()}
-                self.wlan = {"addr": network.WLAN().config("mac").hex()}
+                self.ble = {"key": "", "pin":0, "addr": bmac}
+                self.wlan = {"addr": w.config("mac").hex()}
                 self.setting = -1
         else:
             raise ValueError("Invalid data type")
