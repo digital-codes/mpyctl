@@ -34,17 +34,24 @@ else:
 if machine.unique_id().hex() != cfdata["id"]:
     raise BaseException("Invalid ID")        
 
-# get ble key
-bleKey = cfdata["ble"]["key"]
-print("blekey:",bleKey)
-_ivBase = bytearray([0]*8) # first half of iv
-_cryptMode = 2 # CBC
+try:
+    # get ble key
+    _bleKey = cfdata["ble"]["key"]
+    print("blekey:",_bleKey)
+    _ivBase = bytearray([0]*12) # first 3/4 iv
+    _cryptMode = 2 # CBC
+
+    # generate device name
+    _deviceName = f"{cfdata['model']}_{cfdata['device']:04}" 
+    print("Devicename:",_deviceName)
+except:
+    raise BaseException("Invalid Config")        
 
 
 # pairing stuff
 validation_timer = None
 _msgBytes = const(4)
-pair_value = bytearray()
+pair_value = bytearray([0]*_msgBytes)
 def genChallenge():
     global pair_value
     """create new random challenge with 4 digits"""
@@ -52,13 +59,17 @@ def genChallenge():
     pair_value = pin.to_bytes(_msgBytes,"big")
 
 def verifyResponse(resp):
-    global bleKey, _ivBase, _cryptMode
+    global _bleKey, _ivBase, _cryptMode
     global pair_value
     """verify response data. expect 16byte encrpyted msg followed by 8 byte iv part"""
-    ivPart = resp[-8:]
+    print("Resp:",resp.hex())
+    ivPart = resp[-4:]
+    print(f"IVpart: {ivPart.hex()}")
     iv = bytearray(_ivBase + ivPart)
     print(f"IV: {iv.hex()}")
-    crypt = cryptolib.aes(bleKey,_cryptMode,iv)
+    print(f"KEY: {_bleKey}")
+    print(f"MODE: {_cryptMode}")
+    crypt = cryptolib.aes(bytes.fromhex(_bleKey),_cryptMode,iv)
     msg = crypt.decrypt(resp[:16])[:_msgBytes]
     print(f"DEC: {msg}, {msg.hex()}")
     print(f"PIN: {pair_value}, {pair_value.hex()}")
@@ -69,14 +80,14 @@ def testChallenge():
     pin = pair_value
     print(f"PIN: {pin}")
 
-    ivPart_ = bytearray([random.randint(0,256) for i in range(8)])
+    ivPart_ = bytearray([random.randint(0,256) for i in range(4)])
     print(f"IVpart: {ivPart_.hex()}")
     print(f"IVbase: {_ivBase.hex()}")
 
     iv = _ivBase + ivPart_
     print(f"IV: {iv.hex()}")
 
-    fwd = cryptolib.aes(bleKey,_cryptMode,iv)
+    fwd = cryptolib.aes(bytes.fromhex(_bleKey),_cryptMode,iv)
 
     # need to generate 16 byte message for encryption (padding)
     # standard pkcs7 padding ?
@@ -91,8 +102,7 @@ def testChallenge():
 
     print(verifyResponse(response))
 
-testChallenge()
-
+# testChallenge()
 
 # connected stated
 connected = False
@@ -128,7 +138,7 @@ device_address_str = ":".join("{:02X}".format(byte) for byte in device_address)
 print("BLE Device Address:", device_address_str)
 
 
-DEVICE_NAME = "MpyCtlAtom"
+DEVICE_NAME = _deviceName
 ble.config(gap_name=DEVICE_NAME)
 print("name",DEVICE_NAME)
 
@@ -284,9 +294,7 @@ cfg_characteristic.write(cfg_value)
 pair_characteristic = aioble.Characteristic(
     info_service, DEVICE_PAIR, read=True, write=True, notify=False, capture=True
 )
-pair_value = genChallenge()
 pair_characteristic.write(pair_value)
-
 
 aioble.register_services(temp_service,ctl_service,info_service)
 
@@ -328,7 +336,7 @@ async def ctl_task():
             try:
                 conn, _value = await ctl_characteristic.written()
                 value = _decode_ctl(_value)[0]
-                print("Received:",conn, value)
+                #print("Received:", value)
                 if value == 1:  # Check if the value is 1 (on)
                     # Code to turn the light on
                     print("ON")
@@ -352,7 +360,6 @@ async def pair_task():
     global authorized
     global validation_timer
     print("Start pair")
-    bleKey = bytearray([1,2,3,3,2,1])
     while True:
         if connected:
             try:
@@ -371,7 +378,7 @@ async def pair_task():
                 print("pair error")
                 authorized = False
                 genChallenge() # updates pair_value
-                pair_characteristic.write(pair_value) # clear key
+                pair_characteristic.write(pair_value)
                 await asyncio.sleep_ms(100)
 
         else:
@@ -416,13 +423,9 @@ async def peripheral_task():
                 print("Connection from", connection.device,connection.device.addr_hex())
                 connected = True
                 currentConnection = connection
-    ##            try:
-    ##                connection.pair("12341234")
-    ##                print("Pair OK")
-    ##            except Exception as e:
-    ##                print(f"Pair failed: {e}")
-                #currentDevice = connection.device
-
+                # new challenge
+                genChallenge() # initialize challenge
+                pair_characteristic.write(pair_value)
                 # Start a timer for client ID validation
                 if useValidation:
                     validation_timer.init(mode=machine.Timer.ONE_SHOT, period=10000, callback=on_validation_timer)
@@ -434,8 +437,6 @@ async def peripheral_task():
                 connected = False
                 authorized = False
                 currentConnection = None
-                genChallenge()
-                pair_characteristic.write(pair_value) # clear key
                 asyncio.sleep_ms(10)
                 rgbFill((10,10,10))
         except:
