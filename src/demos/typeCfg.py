@@ -27,7 +27,7 @@ class TypeCfg:
 
         """
         self.buffer = bytearray(10)
-        self.buffer[:5] = bytes((type + " "*5)[:5].encode()) # max 5
+        self.buffer[:5] = bytes((type + " "*5)[:5].encode("utf-8")) # max 5
         self.buffer[5] = version
 
     def value(self):
@@ -67,5 +67,23 @@ class TypeCfg:
             str: The string representation of the TypeCfg object.
 
         """
-        return self.buffer.hex()
+        return " ".join([self.buffer[:5].decode("utf-8"),self.buffer[5:6].hex(),self.buffer[6:].hex()])
     
+if __name__ == "__main__":
+    # Create a TypeCfg object
+    type_cfg = TypeCfg("test", 42)
+
+    # Print the initial buffer value
+    print("Initial buffer value: ", type_cfg.value())
+
+    # Set and get the pin value
+    pin_value = type_cfg.pin(1234)
+    print("Pin value in hex: ", hex(int.from_bytes(pin_value, "big")))
+    print("Pin value: ", type_cfg.pin())
+
+    # Print the string representation of the TypeCfg object
+    print("String representation: ", str(type_cfg))
+    
+    # Print value of the TypeCfg object
+    print("Value (hex): ", type_cfg.value().hex())
+
