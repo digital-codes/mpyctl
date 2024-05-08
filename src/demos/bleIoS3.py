@@ -137,6 +137,10 @@ device_address_str = ":".join("{:02X}".format(byte) for byte in device_address)
 
 print("BLE Device Address:", device_address_str)
 
+##############################
+# security stuff. unused so far
+#ble.config(bond=True,io=0,le_secure=True)
+# io=0 should be like number compare
 
 DEVICE_NAME = _deviceName
 ble.config(gap_name=DEVICE_NAME)
@@ -280,7 +284,7 @@ mfc_characteristic.write(mfc_name.encode())
 mdl_characteristic = aioble.Characteristic(
     info_service, bluetooth.UUID(0x2A24), read=True, notify=False
 )
-mdl_name = "MpyCtl"
+mdl_name = DEVICE_NAME
 mdl_characteristic.write(mdl_name.encode())
 
 # add config characterisitcs 
