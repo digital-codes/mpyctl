@@ -338,7 +338,8 @@ async def sensor_task():
                 await asyncio.sleep_ms(100)
                 continue
            
-            t += random.uniform(-0.5, 0.5)
+            #t += random.uniform(-0.5, 0.5)
+            t = random.randrange(-300,300) / 10
         await asyncio.sleep_ms(1000)
 
 async def ctl_task():
