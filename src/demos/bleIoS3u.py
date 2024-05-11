@@ -314,11 +314,14 @@ aioble.register_services(temp_service,ctl_service,info_service)
 
 # Helper to encode the temperature characteristic encoding (sint16, hundredths of a degree).
 def _encode_temperature(temp_deg_c):
-    return struct.pack("<h", int(temp_deg_c * 100))
+    sensData = struct.pack("<hhhbbBB", int(temp_deg_c * 100), int(0), int(1), 2, 3, 4, 5)
+    return sensData
 
 def _decode_ctl(data):
     # b: unsigned char
-    return struct.unpack("b", data)
+    print("Len ctl:",len(data))
+    ctlData = struct.unpack("b", data)
+    return ctlData
 
 
 # This would be periodically polling a hardware sensor.

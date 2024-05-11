@@ -462,3 +462,43 @@ d.measure()
 d.temperature() # eg. 23.6 (°C)
 d.humidity()    # eg. 41.3 (% RH)
 
+# RMT
+Remote Control Transceiver (RMT)
+Introduction
+
+The RMT (Remote Control Transceiver) peripheral was designed to act as an infrared transceiver. However, due to the flexibility of its data format, RMT can be extended to a versatile and general-purpose transceiver, transmitting or receiving many other types of signals. From the perspective of network layering, the RMT hardware contains both physical and data link layers. The physical layer defines the communication media and bit signal representation. The data link layer defines the format of an RMT frame. The minimal data unit in the frame is called the RMT symbol, which is represented by rmt_symbol_word_t in the driver.
+
+# NVS
+Non-Volatile Storage Library
+Introduction
+
+Non-volatile storage (NVS) library is designed to store key-value pairs in flash. This section introduces some concepts used by NVS.
+Underlying Storage
+
+Currently, NVS uses a portion of main flash memory through the esp_partition API. The library uses all the partitions with data type and nvs subtype. The application can choose to use the partition with the label nvs through the nvs_open() API function or any other partition by specifying its name using the nvs_open_from_partition() API function.
+
+Future versions of this library may have other storage backends to keep data in another flash chip (SPI or I2C), RTC, FRAM, etc.
+
+# Partition
+Partitions API
+Overview
+
+The esp_partition component has higher-level API functions which work with partitions defined in the Partition Tables. These APIs are based on lower level API provided by SPI Flash API.
+Partition Table API
+
+ESP-IDF projects use a partition table to maintain information about various regions of SPI flash memory (bootloader, various application binaries, data, filesystems). More information can be found in Partition Tables.
+
+This component provides API functions to enumerate partitions found in the partition table and perform operations on them. These functions are declared in esp_partition.h:
+
+    esp_partition_find() checks a partition table for entries with specific type, returns an opaque iterator.
+
+    esp_partition_get() returns a structure describing the partition for a given iterator.
+
+    esp_partition_next() shifts the iterator to the next found partition.
+
+    esp_partition_iterator_release() releases iterator returned by esp_partition_find().
+
+    esp_partition_find_first() is a convenience function which returns the structure describing the first partition found by esp_partition_find().
+
+    esp_partition_read(), esp_partition_write(), esp_partition_erase_range() are equivalent to esp_flash_read(), esp_flash_write(), esp_flash_erase_region(), but operate within partition boundaries.
+
