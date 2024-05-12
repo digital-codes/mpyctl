@@ -3,7 +3,7 @@ import time
 from  machine import Pin,I2C
 
 # i2c pins form motion drive
-# Atom lite/mx pins: 21 (scl),15 (sda)
+# Atom lite/mx pins: 21 (scl),25 (sda)
 # Atom S3 pins: 39(scl), 38 (sda)
 i2c = I2C(0,scl=Pin(39),sda=Pin(38),freq=400000)
 devs = i2c.scan()
