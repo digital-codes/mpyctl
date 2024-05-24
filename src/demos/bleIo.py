@@ -65,13 +65,13 @@ def rgbFill(color):
 
 # pairing stuff
 validation_timer = None
-_msgBytes = const(4)
-pair_value = bytearray([0]*_msgBytes)
+msgBytes = const(4)
+pair_value = bytearray([0] * msgBytes)
 def genChallenge():
     global pair_value
     """create new random challenge with 4 digits"""
-    pin = random.getrandbits(8*_msgBytes) # micropython max is 32 bit
-    pair_value = pin.to_bytes(_msgBytes,"big")
+    pin = random.getrandbits(8 * msgBytes) # micropython max is 32 bit
+    pair_value = pin.to_bytes(msgBytes,"big")
 
 def verifyResponse(resp):
     global _bleKey, _ivBase, _cryptMode
@@ -85,7 +85,7 @@ def verifyResponse(resp):
     print(f"KEY: {_bleKey}")
     print(f"MODE: {_cryptMode}")
     crypt = cryptolib.aes(bytes.fromhex(_bleKey),_cryptMode,iv)
-    msg = crypt.decrypt(resp[:16])[:_msgBytes]
+    msg = crypt.decrypt(resp[:16])[: msgBytes]
     print(f"DEC: {msg}, {msg.hex()}")
     print(f"PIN: {pair_value}, {pair_value.hex()}")
     return msg.hex() == pair_value.hex()
@@ -106,7 +106,7 @@ def testChallenge():
 
     # need to generate 16 byte message for encryption (padding)
     # standard pkcs7 padding ?
-    msg = pin + bytes([16 - _msgBytes]*(16 - _msgBytes))
+    msg = pin + bytes([16 -  msgBytes]*(16 -  msgBytes))
     print(f"MSG: {msg.hex()}")
 
     encoded = fwd.encrypt(msg)
@@ -132,11 +132,11 @@ if not ble.active():
     ble.active(True)
 
 
-_IO_CAPABILITY_DISPLAY_ONLY = const(0)
-_IO_CAPABILITY_DISPLAY_YESNO = const(1)
-_IO_CAPABILITY_KEYBOARD_ONLY = const(2)
-_IO_CAPABILITY_NO_INPUT_OUTPUT = const(3)
-_IO_CAPABILITY_KEYBOARD_DISPLAY = const(4)
+IO_CAPABILITY_DISPLAY_ONLY = const(0)
+IO_CAPABILITY_DISPLAY_YESNO = const(1)
+IO_CAPABILITY_KEYBOARD_ONLY = const(2)
+IO_CAPABILITY_NO_INPUT_OUTPUT = const(3)
+IO_CAPABILITY_KEYBOARD_DISPLAY = const(4)
 
 # test security features
 # ble.config(bond=True,io=_IO_CAPABILITY_DISPLAY_ONLY,le_secure=True)
