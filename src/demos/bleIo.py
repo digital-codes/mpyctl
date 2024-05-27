@@ -433,7 +433,11 @@ async def peripheral_task():
     global validation_timer
     global pair_value
     global useValidation
-    validation_timer = machine.Timer(-1)
+    # esp32c3 timer handling is different ...
+    if "ESP32C3" in cfdata["os"]["machine"]:
+        validation_timer = machine.Timer(0)
+    else:
+        validation_timer = machine.Timer(-1)
     print("Start adv")
     while True:
         try:
