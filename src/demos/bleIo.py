@@ -309,9 +309,13 @@ cfg_characteristic = aioble.Characteristic(
 cfg_value = bytearray([0,1,2,3,4,5,6,7,8,9])
 cfg_characteristic.write(cfg_value)
 
+# AK-CHECK
+# windows has issues writing pairing value. might be related to 
+# info service assumed to be read only
+# use config and pairing with ctl service instead
 # capture must be true in order to get data!!!
 pair_characteristic = aioble.Characteristic(
-    info_service, DEVICE_PAIR, read=True, write=True, notify=False, capture=True
+    ctl_service, DEVICE_PAIR, read=True, write=True, notify=False, capture=True
 )
 pair_characteristic.write(pair_value)
 
