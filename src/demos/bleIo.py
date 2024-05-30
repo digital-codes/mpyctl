@@ -35,7 +35,7 @@ if machine.unique_id().hex() != cfdata["id"]:
 try:
     # get ble key
     _bleKey = cfdata["ble"]["key"]
-    print("blekey:",_bleKey)
+    #print("blekey:",_bleKey)
     _ivBase = bytearray([0]*12) # first 3/4 iv
     _cryptMode = 2 # CBC
 
@@ -73,47 +73,63 @@ def genChallenge():
     pin = random.getrandbits(8 * msgBytes) # micropython max is 32 bit
     pair_value = pin.to_bytes(msgBytes,"big")
 
+def decryptMsgWithIv(resp):
+    global _bleKey, _ivBase, _cryptMode
+    """decrypt response data. expect 16byte encrpyted msg followed by 4 byte iv part"""
+    #print("Resp:",resp.hex())
+    ivPart = resp[-4:]
+    #print(f"IVpart: {ivPart.hex()}")
+    iv = bytearray(_ivBase + ivPart)
+    #print(f"IV: {iv.hex()}")
+    #print(f"KEY: {_bleKey}")
+    #print(f"MODE: {_cryptMode}")
+    try:
+        crypt = cryptolib.aes(bytes.fromhex(_bleKey),_cryptMode,iv)
+        msg = crypt.decrypt(resp[:16])[: msgBytes]
+        #print("decrypted msg:",msg.hex())
+        return msg
+    except:
+        return None
+
 def verifyResponse(resp):
     global _bleKey, _ivBase, _cryptMode
     global pair_value
-    """verify response data. expect 16byte encrpyted msg followed by 8 byte iv part"""
-    print("Resp:",resp.hex())
-    ivPart = resp[-4:]
-    print(f"IVpart: {ivPart.hex()}")
-    iv = bytearray(_ivBase + ivPart)
-    print(f"IV: {iv.hex()}")
-    print(f"KEY: {_bleKey}")
-    print(f"MODE: {_cryptMode}")
-    crypt = cryptolib.aes(bytes.fromhex(_bleKey),_cryptMode,iv)
-    msg = crypt.decrypt(resp[:16])[: msgBytes]
-    print(f"DEC: {msg}, {msg.hex()}")
-    print(f"PIN: {pair_value}, {pair_value.hex()}")
+    """verify response data. expect 16byte encrpyted msg followed by  byte iv part"""
+    msg = decryptMsgWithIv(resp)
+    #print(f"DEC: {msg}, {msg.hex()}")
+    #print(f"PIN: {pair_value}, {pair_value.hex()}")
     return msg.hex() == pair_value.hex()
+
+def encryptMsgWithIv(msg):
+    global _bleKey, _ivBase, _cryptMode
+    #print(f"Msg: {msg.hex()}")
+
+    ivPart_ = bytearray([random.randint(0,256) for i in range(4)])
+    #print(f"IVpart: {ivPart_.hex()}")
+    #print(f"IVbase: {_ivBase.hex()}")
+
+    iv = _ivBase + ivPart_
+    #print(f"IV: {iv.hex()}")
+
+    size = len(msg)
+    #print("Len msg:",size)
+    #msg = msg.to_bytes(size,"big") + bytes([16 - size]*(16 - size))
+    msg += bytes([16 - size]*(16 - size))
+
+    fwd = cryptolib.aes(bytes.fromhex(_bleKey),_cryptMode,iv)
+
+    encoded = fwd.encrypt(msg)
+    encodedWIthIv = encoded + ivPart_
+    #print(f"Encoded: {encodedWIthIv.hex()}")
+    return encodedWIthIv
+
 
 def testChallenge():
     genChallenge()
     pin = pair_value
-    print(f"PIN: {pin}")
+    print(f"PIN: {pin.hex()}")
 
-    ivPart_ = bytearray([random.randint(0,256) for i in range(4)])
-    print(f"IVpart: {ivPart_.hex()}")
-    print(f"IVbase: {_ivBase.hex()}")
-
-    iv = _ivBase + ivPart_
-    print(f"IV: {iv.hex()}")
-
-    fwd = cryptolib.aes(bytes.fromhex(_bleKey),_cryptMode,iv)
-
-    # need to generate 16 byte message for encryption (padding)
-    # standard pkcs7 padding ?
-    msg = pin + bytes([16 -  msgBytes]*(16 -  msgBytes))
-    print(f"MSG: {msg.hex()}")
-
-    encoded = fwd.encrypt(msg)
-    print(f"ENC: {encoded.hex()}")
-
-    response = encoded + ivPart_
-    print(f"RESP: {response.hex()}")
+    response = encryptMsgWithIv(pin)
 
     print(verifyResponse(response))
 
@@ -159,17 +175,9 @@ print("BLE Device Address:", device_address_str)
 
 DEVICE_NAME = _deviceName
 ble.config(gap_name=DEVICE_NAME)
-print("name",DEVICE_NAME)
 
 DEVICE_APPEARANCE = const(386) # generic remote control
-print("appearance",DEVICE_APPEARANCE)
-
-
-# tux3
-pc_address_str = "dc:46:28:1f:b0:61"
-# Split the string into components and convert each to an integer, then to bytes
-pc_address = bytes(int(part, 16) for part in pc_address_str.split(':'))
-print(pc_address)
+#print("appearance",DEVICE_APPEARANCE)
 
 
 ##Device Information Service (0x180A): This service contains basic device information.
@@ -240,17 +248,13 @@ print(pc_address)
     
 # org.bluetooth.service.environmental_sensing
 ENV_SENSE_UUID = bluetooth.UUID(0x181A)
-print("SENSE",ENV_SENSE_UUID)
 # org.bluetooth.characteristic.temperature
 ENV_SENSE_TEMP_UUID = bluetooth.UUID(0x2A6E)
-print("TEMP",ENV_SENSE_TEMP_UUID)
 
 # automation 
 ENV_CTL_UUID = bluetooth.UUID(0x1815)
-print("SENSE",ENV_CTL_UUID)
 # org.bluetooth.characteristic.digital
 ENV_CTL_OUT_UUID = bluetooth.UUID(0x2A56)
-print("TEMP",ENV_CTL_OUT_UUID)
 
 # device config characteristics within device information service
 # creating uuid from long string tricky ...
@@ -272,20 +276,15 @@ ADV_INTERVAL_MS = 250_000
 
 # Register GATT server.
 temp_service = aioble.Service(ENV_SENSE_UUID)
-print("TEMP srv",temp_service)
 temp_characteristic = aioble.Characteristic(
     temp_service, ENV_SENSE_TEMP_UUID, read=True, notify=True
 )
-print("TEMP char",temp_characteristic)
-#aioble.register_services(temp_service)
 
 # Register GATT server.
 ctl_service = aioble.Service(ENV_CTL_UUID)
-print("CTL srv",ctl_service)
 ctl_characteristic = aioble.Characteristic(
     ctl_service, ENV_CTL_OUT_UUID, read=True, write=True, notify=False, capture=True
 )
-print("OUT char",ctl_characteristic)
 
 # device infomration
 ENV_INFO_UUID = bluetooth.UUID(0x180A)
@@ -319,6 +318,7 @@ pair_characteristic = aioble.Characteristic(
 )
 pair_characteristic.write(pair_value)
 
+# register all services
 aioble.register_services(temp_service,ctl_service,info_service)
 
 
@@ -326,11 +326,12 @@ aioble.register_services(temp_service,ctl_service,info_service)
 def _encode_temperature(temp_deg_c):
     sensData = struct.pack("<hhhbbBB", int(temp_deg_c * 100), int(0), int(1), 2, 3, 4, 5)
     sensData =  struct.pack("<h", int(temp_deg_c * 100))
-    return sensData
+    encryptedData = encryptMsgWithIv(sensData)
+    return encryptedData
 
-def _decode_ctl(data):
+def _decode_ctl(msg):
     # b: unsigned char
-    print("Len ctl:",len(data))
+    data = decryptMsgWithIv(msg)
     ctlData = struct.unpack("b", data)
     return ctlData
 
