@@ -1,0 +1,5 @@
+name,code,description
+"cat",1,"Cat controller"
+"mxImu",2,"Atom Matrix IMU demo"
+"roverCar",3,"Mecchanum wheel car with sensors"
+
