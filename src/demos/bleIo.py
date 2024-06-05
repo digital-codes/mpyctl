@@ -305,8 +305,12 @@ mdl_characteristic.write(mdl_name.encode())
 cfg_characteristic = aioble.Characteristic(
     info_service, DEVICE_CONFIG_RD, read=True, write=False, notify=False
 )
-cfg_value = bytearray([0,1,2,3,4,5,6,7,8,9])
+
+# index 2 is personality. default to 0
+cfg_value = bytearray([0x55,0xaa,0,0])
 cfg_characteristic.write(cfg_value)
+# change personality value when loading new modules...
+
 
 # AK-CHECK
 # windows has issues writing pairing value. might be related to 

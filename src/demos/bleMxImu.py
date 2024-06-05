@@ -82,9 +82,9 @@ def find_abs_max_and_sign_index(a, b, c):
     max_val = abs(values[max_index])
 
     # Determine the sign of the maximum absolute value
-    if max_val > 0:
+    if values[max_index] > 0:
         sign = 1
-    elif max_val < 0:
+    elif values[max_index] < 0:
         sign = -1
     else:
         sign = 0
@@ -438,13 +438,15 @@ async def sensor_task():
 
                 quaternion = quaternion_from_euler(theta_x, theta_y, theta_z)
                 # quaternion values are -1 .. 1. max is -10..10. sign and index are bool
+                # print("Q:",quaternion,"m:",m,"s:",s,"i:",i)
                 # > 5 signed int, 2 signed bytes
+                # format < is little endian
                 sensData = struct.pack("<hhhhhbb", 
-                                       int(quaternion[0] * 100),
-                                       int(quaternion[1] * 100),
-                                       int(quaternion[2] * 100),
-                                       int(quaternion[3] * 100),
-                                       int(m * 10),
+                                       int(quaternion[0] * 1000),
+                                       int(quaternion[1] * 1000),
+                                       int(quaternion[2] * 1000),
+                                       int(quaternion[3] * 1000),
+                                       int(m * 1000),
                                        s,i)
                 encryptedData = encryptMsgWithIv(sensData)
                 temp_characteristic.write(encryptedData)
@@ -454,7 +456,7 @@ async def sensor_task():
                 await asyncio.sleep_ms(100)
                 continue
            
-        await asyncio.sleep_ms(100)
+        await asyncio.sleep_ms(50)
 
 
 async def ctl_task():
