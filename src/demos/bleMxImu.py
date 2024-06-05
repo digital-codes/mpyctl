@@ -63,7 +63,8 @@ def rgbFill(color):
     global RGB
     if RGB == None:
         return
-    RGB.fill(color)
+    color2 = [int(x/8) for x in color]
+    RGB.fill(color2)
     RGB.write()
 
 # ##########################
@@ -406,13 +407,6 @@ pair_characteristic.write(pair_value)
 aioble.register_services(temp_service,ctl_service,info_service)
 
 
-# Helper to encode the temperature characteristic encoding (sint16, hundredths of a degree).
-def _encode_temperature(temp_deg_c):
-    sensData = struct.pack("<hhhbbBB", int(temp_deg_c * 100), int(0), int(1), 2, 3, 4, 5)
-    sensData =  struct.pack("<h", int(temp_deg_c * 100))
-    encryptedData = encryptMsgWithIv(sensData)
-    return encryptedData
-
 def _decode_ctl(msg):
     # b: unsigned char
     data = decryptMsgWithIv(msg)
@@ -425,7 +419,6 @@ async def sensor_task():
     global connected
     global currentConnection
     print("Start sense")
-    t = 24.5
     while True:
         if connected and authorized:
             try:
@@ -463,15 +456,47 @@ async def sensor_task():
            
         await asyncio.sleep_ms(100)
 
+
+async def ctl_task():
+    global connected
+    print("Start ctl")
+    while True:
+        if connected and authorized:
+            try:
+                conn, _value = await ctl_characteristic.written()
+                value = _decode_ctl(_value)[0]
+                #print("Received:", value)
+                if value == 1:  # Check if the value is 1 (on)
+                    # Code to turn the light on
+                    # print("ON")
+                    # rgbFill((0,100,0))
+                    pass
+                elif value == 0:  # Check if the value is 0 (off)
+                    # Code to turn the light off
+                    # print("OFF")
+                    # rgbFill((0,0,30))
+                    pass
+                else:
+                    print("strange ctl")
+                    # rgbFill((100,0,0))
+            except:
+                print("ctl error")
+                await asyncio.sleep_ms(100)
+
+        else:
+            await asyncio.sleep_ms(100)
+
+
+
 async def pair_task():
     global connected
     global authorized
     global validation_timer
     print("Start pair")
     while True:
-        if connected:
-            try:
-                conn, _value = await pair_characteristic.written()
+        try:
+            conn, _value = await pair_characteristic.written()
+            if connected:
                 print("Pair received:",conn,_value)
                 if verifyResponse(_value):
                     print("Pair OK")
@@ -479,18 +504,19 @@ async def pair_task():
                     authorized = True
                 else:
                     print("Pair failed")
-            except Exception as e:
-                #print("Error occurred:", e)
-                #print("Error type:", type(e))
-                #print("Error arguments:", e.args)
-                print("pair error")
-                authorized = False
-                genChallenge() # updates pair_value
-                pair_characteristic.write(pair_value)
-                await asyncio.sleep_ms(100)
+            else:
+                print("Pair ignored")
+                
+        except Exception as e:
+            print("Error occurred:", e)
+            print("Error type:", type(e))
+            print("Error arguments:", e.args)
+            print("pair error")
+            authorized = False
+            genChallenge() # updates pair_value
+            pair_characteristic.write(pair_value)
 
-        else:
-            await asyncio.sleep_ms(100)
+        await asyncio.sleep_ms(100)
 
 
 def on_validation_timer(timer):
@@ -532,12 +558,13 @@ async def peripheral_task():
                 appearance=DEVICE_APPEARANCE,
                 #manufacturer=(0xabcd, b"Digital Codes"),
             ) as connection:
-                print("Connection from", connection.device,connection.device.addr_hex())
                 connected = True
                 currentConnection = connection
                 # new challenge
                 genChallenge() # initialize challenge
                 pair_characteristic.write(pair_value)
+                # 
+                print("Connection from", connection.device,connection.device.addr_hex())
                 # Start a timer for client ID validation
                 if useValidation:
                     validation_timer.init(mode=machine.Timer.ONE_SHOT, period=10000, callback=on_validation_timer)
@@ -550,7 +577,7 @@ async def peripheral_task():
                 authorized = False
                 currentConnection = None
                 asyncio.sleep_ms(10)
-                rgbFill((10,10,10))
+                rgbFill((100,100,100))
         except:
             print("argh ...")
             await asyncio.sleep_ms(100)
@@ -559,12 +586,12 @@ async def peripheral_task():
 # Run both tasks.
 async def main():
     t1 = asyncio.create_task(sensor_task())
+    t2 = asyncio.create_task(ctl_task())
     t3 = asyncio.create_task(peripheral_task())
     t4 = asyncio.create_task(pair_task())
-    # await asyncio.gather(t1, t2, t3)
 
     try:
-        await asyncio.gather(t1, t3,t4)
+        await asyncio.gather(t1, t2, t3, t4)
 
     except asyncio.TimeoutError:
         print("Timeout in main:")
@@ -578,9 +605,9 @@ async def main():
     except any as err:
         print("Error in main:",err)
 
-    rgbFill((10,10,10))
+    rgbFill((100,100,100))
 
 
-rgbFill((10,10,10))
+rgbFill((100,100,100))
 asyncio.run(main())
 

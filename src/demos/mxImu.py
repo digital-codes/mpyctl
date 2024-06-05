@@ -6,8 +6,6 @@ import math
 
 import mpu6886
 
-
-
 # pins for mx atom
 # Atom mx grove pins: 26 (scl),32 (sda)
 # Atom mx internal i2c: 21 (scl), 25 (sda)
