@@ -85,10 +85,14 @@ def decryptMsgWithIv(resp):
     #print(f"MODE: {_cryptMode}")
     try:
         crypt = cryptolib.aes(bytes.fromhex(_bleKey),_cryptMode,iv)
-        msg = crypt.decrypt(resp[:16])[: msgBytes]
+        msg = crypt.decrypt(resp[:16]) 
+        # pkcs7 stuff: check final byte to get padding length
+        padding = 16 - msg[-1]
+        msg = msg[:padding]
         #print("decrypted msg:",msg.hex())
         return msg
     except:
+        print("Decrypt failed")
         return None
 
 def verifyResponse(resp):
