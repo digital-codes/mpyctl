@@ -311,7 +311,7 @@ cfg_characteristic = aioble.Characteristic(
 )
 
 # index 2 is personality. default to 0
-personality = 0
+personality = 4
 cfg_value = bytearray([0x55,0xaa,personality,0])
 cfg_characteristic.write(cfg_value)
 # change personality value when loading new modules...
