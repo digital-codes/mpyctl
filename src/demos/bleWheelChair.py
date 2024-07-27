@@ -584,6 +584,7 @@ async def peripheral_task():
                 connected = False
                 authorized = False
                 currentConnection = None
+                initCtlPin()
                 asyncio.sleep_ms(10)
                 rgbFill((10,10,10))
         except:
