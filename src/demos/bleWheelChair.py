@@ -293,11 +293,11 @@ def _decode_ctl(msg):
 # setup blcd stuff
 
 # setup pwm
-# speed pulse: g9
-speedPin = 9
+# speed pulse: g8
+speedPin = 8
 # pwm: g6   # 6 is used by neopixel
 ctlPin = 6
-# extra: g20    # 20 is used by i2c 
+# extra: g7    # 7
 
 
 speedSignal = machine.Pin(speedPin, machine.Pin.IN, machine.Pin.PULL_UP)
