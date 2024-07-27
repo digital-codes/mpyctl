@@ -18,6 +18,13 @@ import os
 
 import neopixel
 
+import time 
+import math
+
+import micropython
+micropython.alloc_emergency_exception_buf(100)
+
+
 
 # config stuff
 _CONF_FILE = "config.json"
@@ -184,70 +191,6 @@ DEVICE_APPEARANCE = const(386) # generic remote control
 #print("appearance",DEVICE_APPEARANCE)
 
 
-##Device Information Service (0x180A): This service contains basic device information.
-##
-##    Manufacturer Name String (0x2A29): UUID for manufacturer's name.
-##    Model Number String (0x2A24): UUID for the model number of the device.
-##    Serial Number String (0x2A25): UUID for the serial number.
-##    Hardware Revision String (0x2A27): UUID for the hardware revision.
-##    Firmware Revision String (0x2A26): UUID for the firmware revision.
-##    Software Revision String (0x2A28): UUID for the software revision.
-##    System ID (0x2A23): UUID for system ID.
-##    IEEE 11073-20601 Regulatory Certification Data List (0x2A2A): UUID for regulatory certification data.
-##    PnP ID (0x2A50): UUID for Plug and Play ID.
-##
-##Battery Service (0x180F): This service provides information about the battery level.
-##    Battery Level (0x2A19): UUID for battery level.
-##    
-
-##Environmental Sensing Service (0x181A): This service is often used for environmental sensors, such as temperature, humidity, or air quality sensors.
-##
-##    Temperature (0x2A6E)
-##    Humidity (0x2A6F)
-##    Pressure (0x2A6D)
-##
-
-##Automation IO Service (0x1815): This service is relevant for simple input/output functionalities, often used in home automation for controlling actuators like switches or relays.
-##Digital (UUID: 0x2A56):
-##
-##    This characteristic is used to represent the state of a digital signal. It's typically used for simple binary devices like switches, where the characteristic can represent an ON or OFF state.
-##    It can be used to read the current state, write a new state (like turning a light on or off), or notify/indicate a state change.
-##
-##Analog (UUID: 0x2A58):
-##
-##    The Analog characteristic represents the state of an analog signal. It can be used for devices that require or provide a range of values instead of just binary states, like dimmers or variable-speed fans.
-##    Similar to the Digital characteristic, it supports read, write, and notify/indicate operations.
-##
-##Aggregate (UUID: 0x2A5A):
-##
-##    This characteristic is used to aggregate multiple digital and analog signals into a single characteristic. It's useful when a device has multiple sensors or actuators that need to be read or controlled simultaneously.
-##    The Aggregate characteristic is a bitfield or array that encapsulates the states of various digital and analog signals.
-##    
-
-##In Bluetooth Low Energy (BLE), the Appearance value is a standardized data type used in advertising packets to give a hint about the type of device. This helps in identifying the kind of device before making a connection. The Appearance value is a 16-bit field defined in the Bluetooth specifications.
-##
-##Here are some standard Appearance values for common device types:
-##
-##    Generic Phone (Appearance Value: 64): Represents a generic phone.
-##
-##    Generic Computer (Appearance Value: 128): Represents a generic computer or computing device.
-##
-##    Generic Watch (Appearance Value: 192): This is typically used for wearable watch devices.
-##
-##    Generic Thermometer (Appearance Value: 768): Represents a generic thermometer, often used for temperature sensing devices.
-##
-##    Heart Rate Sensor (Appearance Value: 832): Used for devices that measure heart rate.
-##
-##    Blood Pressure (Appearance Value: 896): For blood pressure monitors.
-##
-##    Human Interface Device (HID) (Appearance Value: 960): Used for input or output devices like keyboards, mice, or game controllers.
-##
-##    Generic Light Fixture (Appearance Value: 1088): For smart lighting systems.
-##
-##    Generic Fan (Appearance Value: 1152): Used for devices like smart fans.
-##
-##    Generic Air Conditioning (Appearance Value: 1216): For air conditioning units.
-##    
 
     
 # org.bluetooth.service.environmental_sensing
@@ -332,60 +275,219 @@ aioble.register_services(temp_service,ctl_service,info_service)
 
 
 # Helper to encode the temperature characteristic encoding (sint16, hundredths of a degree).
-def _encode_temperature(temp_deg_c):
-    sensData = struct.pack("<hhhbbBB", int(temp_deg_c * 100), int(0), int(1), 2, 3, 4, 5)
-    sensData =  struct.pack("<h", int(temp_deg_c * 100))
+def _encode_data(data):
+    ### wheelchair has 2 data values: 0:status (byte), 1: turn (byte), 2:speed (uint16),  
+    sensData = struct.pack("<bbh", int(data["status"]),int(data["turn"]),int(data["speed"]))
     encryptedData = encryptMsgWithIv(sensData)
     return encryptedData
 
 def _decode_ctl(msg):
     # b: unsigned char
+    ### wheelchair has 4 ctl byte values: 0:starting (bool), 1:speed (0..10), 2:turn (0..10), 3:direction (0/1)
     data = decryptMsgWithIv(msg)
-    ctlData = struct.unpack("b", data)
+    ctlData = struct.unpack("<bbbb", data)
     return ctlData
 
+
+##############################
+# setup blcd stuff
+
+# setup pwm
+# speed pulse: g9
+speedPin = 9
+# pwm: g6   # 6 is used by neopixel
+ctlPin = 6
+# extra: g20    # 20 is used by i2c 
+
+
+speedSignal = machine.Pin(speedPin, machine.Pin.IN, machine.Pin.PULL_UP)
+
+# tick counter shared with irq callback
+speedTick = time.ticks_ms()
+speedDelta = 0
+# the irq callback just stores the time difference between pulses
+# for more action see "Using micropython.schedule"
+
+def speedCallback(p):
+    """ interrupt to measure delay between pulses """
+    global speedTick, speedDelta
+    t = time.ticks_ms()
+    speedDelta = time.ticks_diff(t, speedTick) # set delta
+    speedTick = t # update tick
+
+# we can start the irq right here
+speedSignal.irq(trigger=machine.Pin.IRQ_FALLING, handler=speedCallback)
+
+
+########
+ctlSignal = None
+ctlMinDuty = 100
+ctlMinReturn = 27 # we need to measure and update this value
+ctlMaxDuty = 250
+ctlMaxRegDuty = 400 # while regulating we allow more
+ctlMaxReturn = 75 # we need to measure and update this value
+# intended speed and duty setting
+targetDuty = 0
+targetSpeed = 0
+# current speed setting
+currentSpeed = 0
+
+statusCodes = {"good":0,"battery":1,"warning":2,"error":3}
+
+# pulse delay in range 40 .. 15 ms ~ 25 .. 75 Hz
+# create duty cycle mapping
+def speedToDuty(speed):
+    """map speed to duty cycle"""
+    global ctlMinDuty, ctlMaxDuty
+    return ctlMinDuty + (ctlMaxDuty - ctlMinDuty) * speed // 10
+
+# create speed mapping
+def speedToReturn(speed):
+    """map speed to delay"""
+    global ctlMinReturn, ctlMaxReturn
+    return ctlMinReturn + (ctlMaxReturn - ctlMinReturn) * speed // 10
+
+#create speed mapping
+def delayToCtl(delay):
+    """map delay to speed"""
+    if delay > 200:
+        return 0
+    elif delay < 1:
+        return 10
+    else:
+        return 1000 / delay
+
+# speed regulator
+def speedRegulator(current,expected):
+    """control speed based on target speed"""
+    global targetDuty
+    if targetDuty == 0:
+        return
+    if abs(current - expected) < 1:
+        return
+    elif current < expected:
+        error = expected - current
+        targetDuty += math.ceil(error)
+    else:    
+        error = current - expected
+        targetDuty -= math.ceil(error)
+    if targetDuty < ctlMinDuty:
+        targetDuty = ctlMinDuty
+    elif targetDuty > ctlMaxRegDuty:
+        targetDuty = ctlMaxRegDuty
+    print("Error:",error)
+    setCtlDuty(math.floor(targetDuty))
+        
+
+
+# control output
+def initCtlPin():
+    """set ctl value to static value"""
+    global ctlSignal, ctlPin
+    global targetDuty, targetSpeed
+    if type(ctlSignal) == machine.PWM:
+        ctlSignal.deinit()
+    ctlSignal = machine.Pin(ctlPin, machine.Pin.OUT)
+    ctlSignal.off()
+    targetDuty = 0
+    targetSpeed = 0
+
+
+def initCtlPwm():
+    """set ctl value to pwm value"""
+    # start with some slow value
+    global ctlSignal, ctlPin, ctlMinDuty
+    ctlSignal = machine.PWM(machine.Pin(ctlPin), freq=1000, duty=speedToDuty(0))
+
+def setCtlDuty(duty):
+    """set ctl value to duty value"""
+    global ctlSignal
+    print("Duty:",duty)
+    ctlSignal.duty(duty)
+
+# init to static 0
+initCtlPin()
+time.sleep(.1)
 
 # This would be periodically polling a hardware sensor.
 async def sensor_task():
     global connected
     global currentConnection
+    global speedTick, speedDelta, statusCodes
+    global targetDuty
     print("Start sense")
-    t = 24.5
     while True:
         if connected and authorized:
-            print("Temp",t)
+            t = time.ticks_ms()
+            t0 = speedTick
+            delta = time.ticks_diff(t, t0) # set delta
+            #print("Delta",delta)
+            status = 0
+            if delta > 200:
+                #print("Delta",delta)
+                speedReturn = 0   
+                if targetDuty > 0:
+                    print("Timeout")
+                    status = statusCodes["warning"]
+            else:
+                speedReturn = delayToCtl(speedDelta) # use global speedDelta
+                expectedReturn = speedToReturn(targetSpeed)
+                # slower => actual - expected negative. values +/- sort of ok. 
+                # larger (5,10 ..) values are bad
+                speedRegulator(speedReturn,expectedReturn)
+                
+            #print("Temp",speed)
             try:
-                temp_characteristic.write(_encode_temperature(t))
+                ## App: expect 3 values, status(byte), turn(byte), speed(uint16)
+                data = {"status":status,"turn":random.randint(0,10),"speed":speedReturn}
+                temp_characteristic.write(_encode_data(data))
                 temp_characteristic.notify(currentConnection)
             except:
                 print("sense error")
                 await asyncio.sleep_ms(100)
                 continue
            
-            #t += random.uniform(-0.5, 0.5)
-            t = random.randrange(-300,300) / 10
-        await asyncio.sleep_ms(1000)
+        await asyncio.sleep_ms(100)
 
 async def ctl_task():
-    global connected
+    global connected, targetDuty, targetSpeed
     print("Start ctl")
     while True:
         if connected and authorized:
             try:
                 conn, _value = await ctl_characteristic.written()
-                value = _decode_ctl(_value)[0]
-                #print("Received:", value)
-                if value == 1:  # Check if the value is 1 (on)
+                ctl = _decode_ctl(_value)
+                print("Received ctl:",ctl)
+                ## App: 0: starting, 1: speed, 2: turn, 3: direction
+                # if starting, initialize PWM, set target speed to ctl[1] (normally 0)
+                # else set target speed to value if value > 0
+                # else set target speed to 0 and deinit PWM
+                if ctl[0] == 1:  # Check if the value is 1 (on)
                     # Code to turn the light on
-                    print("ON")
-                    rgbFill((0,100,0))
-                elif value == 0:  # Check if the value is 0 (off)
+                    initCtlPin() # set to static value
+                    await asyncio.sleep_ms(100)
+                    initCtlPwm() # set to default value
+                    targetDuty = speedToDuty(ctl[1])
+                    targetSpeed = ctl[1]
+                    print("START")
+                    rgbFill((0,30,0))
+                    
+                elif ctl[0] == 2:  # Check if the value is 2 (stop)       
+                    initCtlPin()
+                    targetDuty = 0
+                    targetSpeed = 0
+                    print("STOP")
+                    rgbFill((30,0,0))
+                    
+                else:  # Check if the value is 0 (off)
                     # Code to turn the light off
-                    print("OFF")
+                    targetSpeed = ctl[1]
+                    duty = speedToDuty(ctl[1])
+                    targetDuty = duty
+                    setCtlDuty(duty)
+                    # check if stop
+                    print("RUN")
                     rgbFill((0,0,30))
-                else:
-                    print("else")
-                    rgbFill((100,0,0))
             except:
                 print("ctl error")
                 await asyncio.sleep_ms(100)
@@ -435,6 +537,9 @@ async def disconnect_device():
         #print("Disconnecting:",currentConnection)
         await currentConnection.disconnect(0)
         #print("Disconnect complete")
+        # stop motor
+        initCtlPin()
+        
 
 
 
@@ -515,3 +620,4 @@ async def main():
 rgbFill((10,10,10))
 asyncio.run(main())
 
+initCtlPin()
