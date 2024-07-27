@@ -283,9 +283,9 @@ def _encode_data(data):
 
 def _decode_ctl(msg):
     # b: unsigned char
-    ### wheelchair has 4 ctl byte values: 0:starting (bool), 1:speed (0..10), 2:turn (0..10), 3:direction (0/1)
+    ### wheelchair has 5 ctl byte values: 0:starting (bool), 1:speed (0..10), 2:turn (0..10), 3:direction (0/1), 4:voltage (0/1)    
     data = decryptMsgWithIv(msg)
-    ctlData = struct.unpack("<bbbb", data)
+    ctlData = struct.unpack("<bbbbb", data)
     return ctlData
 
 
@@ -320,12 +320,33 @@ speedSignal.irq(trigger=machine.Pin.IRQ_FALLING, handler=speedCallback)
 
 
 ########
+# duty values are voltage dependent
+ctlMinDuty = 0
+ctlMaxDuty = 0
+ctlMaxRegDuty = 0 # while regulating we allow more
+
+# return values are fixed
+ctlMinReturn = 25 # we need to measure and update this value
+ctlMaxReturn = 80 # we need to measure and update this value
+
+
+def setDutyLimits(high = False):
+    global ctlMinDuty, ctlMaxDuty, ctlMaxRegDuty
+    if high:
+        print("High voltage")
+        ctlMinDuty = 40
+        ctlMaxDuty = 150
+        ctlMaxRegDuty = 250 # leave some extra margin
+    else:
+        print("Low voltage")
+        ctlMinDuty = 100
+        ctlMaxDuty = 250
+        ctlMaxRegDuty = 400 # leave some extra margin
+
+# intit duty limits
+setDutyLimits(False)
+        
 ctlSignal = None
-ctlMinDuty = 100
-ctlMinReturn = 27 # we need to measure and update this value
-ctlMaxDuty = 250
-ctlMaxRegDuty = 400 # while regulating we allow more
-ctlMaxReturn = 75 # we need to measure and update this value
 # intended speed and duty setting
 targetDuty = 0
 targetSpeed = 0
@@ -427,7 +448,7 @@ async def sensor_task():
                 #print("Delta",delta)
                 speedReturn = 0   
                 if targetDuty > 0:
-                    print("Timeout")
+                    # print("Timeout")
                     status = statusCodes["warning"]
             else:
                 speedReturn = delayToCtl(speedDelta) # use global speedDelta
@@ -458,13 +479,15 @@ async def ctl_task():
                 conn, _value = await ctl_characteristic.written()
                 ctl = _decode_ctl(_value)
                 print("Received ctl:",ctl)
-                ## App: 0: starting, 1: speed, 2: turn, 3: direction
+                ## App: 0: starting, 1: speed, 2: turn, 3: direction, 4: voltage
                 # if starting, initialize PWM, set target speed to ctl[1] (normally 0)
                 # else set target speed to value if value > 0
                 # else set target speed to 0 and deinit PWM
                 if ctl[0] == 1:  # Check if the value is 1 (on)
                     # Code to turn the light on
                     initCtlPin() # set to static value
+                    # on start also check voltage. before init pwm!
+                    setDutyLimits(ctl[4] == 1)
                     await asyncio.sleep_ms(100)
                     initCtlPwm() # set to default value
                     targetDuty = speedToDuty(ctl[1])
