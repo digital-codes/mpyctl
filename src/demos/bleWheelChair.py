@@ -418,6 +418,14 @@ def initCtlPwm():
     """set ctl value to pwm value"""
     # start with some slow value
     global ctlSignal, ctlPin, ctlMinDuty
+    if type(ctlSignal) == machine.PWM:
+        print("ALready PWM")
+        return
+    else:
+        #try to get started with a high pulse
+        ctlSignal.on()
+        time.sleep(.05)
+    # set pwm 
     ctlSignal = machine.PWM(machine.Pin(ctlPin), freq=1000, duty=speedToDuty(0))
 
 def setCtlDuty(duty):
@@ -644,4 +652,6 @@ async def main():
 rgbFill((10,10,10))
 asyncio.run(main())
 
+# finally ...
 initCtlPin()
+speedSignal.irq(handler=None)
