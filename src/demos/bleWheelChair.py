@@ -292,12 +292,30 @@ def _decode_ctl(msg):
 ##############################
 # setup blcd stuff
 
+# Hall sensors:
+# A - white  (next to VCC)
+# B - blue
+# C - yellow
+
+# Motor coils:
+# A - yellow
+# B - green
+# C - blue (next to V+)
+
+# detect proper settings: smooth rotation, unstoppable
+# bad settings: stoppable or noisy rotation or noise without rotation
+
+# rotation setting is low active
+# break is low active
+# maybe use pulldown on break to prevent unwanted rotation on startup until controller is active
+
 # setup pwm
 # speed pulse: g8
 speedPin = 8
 # pwm: g6   # 6 is used by neopixel
 ctlPin = 6
-# extra: g7    # 7
+# maybe use pulldown on ctlPin
+# extra: g7 and  g10  # 
 
 
 speedSignal = machine.Pin(speedPin, machine.Pin.IN, machine.Pin.PULL_UP)
