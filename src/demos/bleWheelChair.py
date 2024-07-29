@@ -315,8 +315,11 @@ speedPin = 8
 # pwm: g6   # 6 is used by neopixel
 ctlPin = 6
 # maybe use pulldown on ctlPin
-# extra: g7 and  g10  # 
+brk = 7 # pull break low after startup
+# extra: g10  # 
 
+brkSignal = machine.Pin(brk, machine.Pin.OUT)
+brkSignal.on() # break
 
 speedSignal = machine.Pin(speedPin, machine.Pin.IN, machine.Pin.PULL_UP)
 
@@ -438,11 +441,8 @@ def initCtlPwm():
     global ctlSignal, ctlPin, ctlMinDuty
     if type(ctlSignal) == machine.PWM:
         print("ALready PWM")
+        ctlSignal.duty(speedToDuty(0))
         return
-    else:
-        #try to get started with a high pulse
-        ctlSignal.on()
-        time.sleep(.05)
     # set pwm 
     ctlSignal = machine.PWM(machine.Pin(ctlPin), freq=1000, duty=speedToDuty(0))
 
@@ -455,6 +455,9 @@ def setCtlDuty(duty):
 # init to static 0
 initCtlPin()
 time.sleep(.1)
+# release break
+brkSignal.off()
+
 
 # This would be periodically polling a hardware sensor.
 async def sensor_task():
@@ -673,3 +676,4 @@ asyncio.run(main())
 # finally ...
 initCtlPin()
 speedSignal.irq(handler=None)
+brkSignal.on() # break
