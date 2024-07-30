@@ -340,29 +340,57 @@ def speedCallback(p):
 speedSignal.irq(trigger=machine.Pin.IRQ_FALLING, handler=speedCallback)
 
 
+
+###################
+###################
+# measured no load motor characteristics
+# settings range 0 .. 10. 0 is minimum speed, 10 is maximum speed
+# 12V
+## duty = 16.85x + 114
+## return = 5.55x + 24
+## dduty/dreturn = 3.2 
+
+# 24V
+## duty = 6.93x + 45
+## return = 5.35x + 25
+## dduty/dreturn = 1.3
+
+###################
+###################
+# return values are fixed
+# allowed range is 20 .. 100
+ctlMinReturn = 20 # we need to measure and update this value
+ctlMaxReturn = 100 # we need to measure and update this value
+# duty values are min:
+#  100 for 12V (x = -.8) and  38 for 24V (x = -.9)
+# max:
+# 350 for 12V (x = 10) and 142 for 24V (x = 10)
+# 
+
+
+highVoltage = False
+
 ########
 # duty values are voltage dependent
 ctlMinDuty = 0
 ctlMaxDuty = 0
 ctlMaxRegDuty = 0 # while regulating we allow more
 
-# return values are fixed
-ctlMinReturn = 25 # we need to measure and update this value
-ctlMaxReturn = 80 # we need to measure and update this value
-
 
 def setDutyLimits(high = False):
-    global ctlMinDuty, ctlMaxDuty, ctlMaxRegDuty
+    global ctlMinDuty, ctlMaxDuty, ctlMaxRegDuty, highVoltage
     if high:
-        print("High voltage")
-        ctlMinDuty = 40
+        #print("High voltage")
+        ctlMinDuty = 35
         ctlMaxDuty = 150
-        ctlMaxRegDuty = 250 # leave some extra margin
+        ctlMaxRegDuty = 300 # leave some extra margin
+        highVoltage = True
     else:
-        print("Low voltage")
-        ctlMinDuty = 100
-        ctlMaxDuty = 250
-        ctlMaxRegDuty = 400 # leave some extra margin
+        #print("Low voltage")
+        ctlMinDuty = 95
+        ctlMaxDuty = 350
+        ctlMaxRegDuty = 700 # leave some extra margin
+        highVoltage = False
 
 # intit duty limits
 setDutyLimits(False)
@@ -381,18 +409,18 @@ statusCodes = {"good":0,"battery":1,"warning":2,"error":3}
 def speedToDuty(speed):
     """map speed to duty cycle"""
     global ctlMinDuty, ctlMaxDuty
-    return ctlMinDuty + (ctlMaxDuty - ctlMinDuty) * speed // 10
+    return round(ctlMinDuty + ((ctlMaxDuty - ctlMinDuty) / 10) * speed)
 
 # create speed mapping
 def speedToReturn(speed):
     """map speed to delay"""
     global ctlMinReturn, ctlMaxReturn
-    return ctlMinReturn + (ctlMaxReturn - ctlMinReturn) * speed // 10
+    return round(ctlMinReturn + ((ctlMaxReturn - ctlMinReturn) / 10) * speed)
 
 #create speed mapping
 def delayToCtl(delay):
     """map delay to speed"""
-    if delay > 200:
+    if delay > 100:
         return 0
     elif delay < 1:
         return 10
@@ -402,16 +430,18 @@ def delayToCtl(delay):
 # speed regulator
 def speedRegulator(current,expected):
     """control speed based on target speed"""
-    global targetDuty
+    global targetDuty, highVoltage
     if targetDuty == 0:
         return
-    if abs(current - expected) < 1:
+    if abs(current - expected) < 2:
         return
     elif current < expected:
         error = expected - current
         targetDuty += math.ceil(error)
     else:    
         error = current - expected
+        if highVoltage:
+            error = round(error / 2)
         targetDuty -= math.ceil(error)
     if targetDuty < ctlMinDuty:
         targetDuty = ctlMinDuty
@@ -473,7 +503,7 @@ async def sensor_task():
             delta = time.ticks_diff(t, t0) # set delta
             #print("Delta",delta)
             status = 0
-            if delta > 200:
+            if delta > 100:
                 #print("Delta",delta)
                 speedReturn = 0   
                 if targetDuty > 0:
@@ -512,7 +542,7 @@ async def ctl_task():
                 # if starting, initialize PWM, set target speed to ctl[1] (normally 0)
                 # else set target speed to value if value > 0
                 # else set target speed to 0 and deinit PWM
-                if ctl[0] == 1:  # Check if the value is 1 (on)
+                if ctl[0] == 1:  # Check if the value is 1 (starting)
                     # Code to turn the light on
                     initCtlPin() # set to static value
                     # on start also check voltage. before init pwm!
@@ -531,7 +561,7 @@ async def ctl_task():
                     print("STOP")
                     rgbFill((30,0,0))
                     
-                else:  # Check if the value is 0 (off)
+                else:  # Check if the value is 0 (normal)
                     # Code to turn the light off
                     targetSpeed = ctl[1]
                     duty = speedToDuty(ctl[1])
