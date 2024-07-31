@@ -476,7 +476,9 @@ def initCtlPwm():
         ctlSignal.duty(speedToDuty(0))
         return
     # set pwm 
-    ctlSignal = machine.PWM(machine.Pin(ctlPin), freq=1000, duty=speedToDuty(0))
+    # test: increase pwm to 10kHz
+    freq = 10000
+    ctlSignal = machine.PWM(machine.Pin(ctlPin), freq=freq, duty=speedToDuty(0))
 
 def setCtlDuty(duty):
     """set ctl value to duty value"""
@@ -512,10 +514,12 @@ async def sensor_task():
                 if targetDuty > 0:
                     # print("Timeout")
                     status = statusCodes["warning"]
-                    if startupTimer > 0:
-                        startupTimer -= 1
-                        expectedReturn = speedToReturn(targetSpeed)
-                        speedRegulator(speedReturn,expectedReturn)
+                    # setCtlDuty(ctlMaxRegDuty)
+                    # if startupTimer > 0:
+                    #    startupTimer -= 1
+                    #    setCtlDuty(ctlMaxRegDuty)
+                        # expectedReturn = speedToReturn(targetSpeed)
+                        # speedRegulator(speedReturn,expectedReturn)
             else:
                 speedReturn = delayToCtl(speedDelta) # use global speedDelta
                 expectedReturn = speedToReturn(targetSpeed)
@@ -560,7 +564,7 @@ async def ctl_task():
                     targetDuty = speedToDuty(ctl[1])
                     targetSpeed = ctl[1]
                     # init startup timer to get motor running on high load
-                    startupTimer = 25
+                    startupTimer = 5
                     print("START")
                     rgbFill((0,30,0))
                     
