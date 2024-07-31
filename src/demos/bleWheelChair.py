@@ -401,6 +401,8 @@ targetDuty = 0
 targetSpeed = 0
 # current speed setting
 currentSpeed = 0
+# startupTimer
+startupTimer = 0
 
 statusCodes = {"good":0,"battery":1,"warning":2,"error":3}
 
@@ -495,6 +497,7 @@ async def sensor_task():
     global currentConnection
     global speedTick, speedDelta, statusCodes
     global targetDuty
+    global startupTimer
     print("Start sense")
     while True:
         if connected and authorized:
@@ -509,6 +512,10 @@ async def sensor_task():
                 if targetDuty > 0:
                     # print("Timeout")
                     status = statusCodes["warning"]
+                    if startupTimer > 0:
+                        startupTimer -= 1
+                        expectedReturn = speedToReturn(targetSpeed)
+                        speedRegulator(speedReturn,expectedReturn)
             else:
                 speedReturn = delayToCtl(speedDelta) # use global speedDelta
                 expectedReturn = speedToReturn(targetSpeed)
@@ -531,6 +538,7 @@ async def sensor_task():
 
 async def ctl_task():
     global connected, targetDuty, targetSpeed
+    global startupTimer
     print("Start ctl")
     while True:
         if connected and authorized:
@@ -551,6 +559,8 @@ async def ctl_task():
                     initCtlPwm() # set to default value
                     targetDuty = speedToDuty(ctl[1])
                     targetSpeed = ctl[1]
+                    # init startup timer to get motor running on high load
+                    startupTimer = 25
                     print("START")
                     rgbFill((0,30,0))
                     
@@ -558,6 +568,7 @@ async def ctl_task():
                     initCtlPin()
                     targetDuty = 0
                     targetSpeed = 0
+                    startupTimer = 0
                     print("STOP")
                     rgbFill((30,0,0))
                     
@@ -567,6 +578,7 @@ async def ctl_task():
                     duty = speedToDuty(ctl[1])
                     targetDuty = duty
                     setCtlDuty(duty)
+                    startupTimer = 0
                     # check if stop
                     print("RUN")
                     rgbFill((0,0,30))
