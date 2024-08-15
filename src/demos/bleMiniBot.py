@@ -22,6 +22,9 @@ import neopixel
 import math
 import mpu6886
 
+from crcX25 import crc16_x25
+# crc16_x25(b"123456789")
+
 
 
 # config stuff
