@@ -1,6 +1,7 @@
 import binascii
 import struct
 import random
+import socket
 
 try:
     import machine
@@ -21,8 +22,8 @@ except ImportError:
 
 # sensdata is a bytearray, 32 bytes, forst 16 bytes is crap
 # upper 16 bytes are filled with values
-def insertSensor(id,temp,hum,pres,cnt,fmt=1):
-    dset = struct.pack("!BBBBHHHHH",id,fmt,0,0,cnt,temp,hum,0,pres)
+def insertSensor(id,temp,hum,pres,cnt,fmt=1,co2=400):
+    dset = struct.pack("!BBBBHHHHH",id,fmt,0,0,cnt,temp,hum,co2,pres)
     print(dset)
     crc_ = x25crc(dset)
     crc = struct.pack("!H",crc_)
@@ -30,7 +31,7 @@ def insertSensor(id,temp,hum,pres,cnt,fmt=1):
     sensData = bytearray([0]*16) + bytearray(list(dset)) + bytearray(list(crc))
     return sensData
     
-d = insertSensor(1,2,3,4,5)
+d = insertSensor(2,25,52,999,6)
 print(bytes(d),len(d))
 
 
@@ -93,4 +94,18 @@ def checkMsg(msg):
 
 check = checkMsg(cryptData.hex())
 print("Check:",check)
+
+def sendMsg(msg):
+    try:
+        server = "iot.a-kugel.de"
+        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        s.connect((server, 50351))
+        s.sendall(msg.encode())
+        s.close()
+        print("Message sent successfully")
+    except Exception as e:
+        print("Error sending message:", str(e))
+    
+if arch == "host"
+    sendMsg(cryptData.hex())
 
