@@ -435,7 +435,7 @@ async def sensor_task():
                 print("sense error")
                 await asyncio.sleep_ms(100)
                 continue
-        await asyncio.sleep_ms(100)
+        await asyncio.sleep_ms(1000)
 
 async def ctl_task():
     global connected
