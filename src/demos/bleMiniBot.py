@@ -70,7 +70,7 @@ def rgbFill(color):
     RGB.fill(color)
     RGB.write()
 
-# imu
+# imu. on atom mx shared with motion drive
 if cfdata["io"]["i2c"] != None:
     print("I2C",cfdata["io"]["i2c"])
     i2c = machine.I2C(0,scl=machine.Pin(cfdata["io"]["i2c"]["scl"]),sda=machine.Pin(cfdata["io"]["i2c"]["sda"]),freq=400000)
@@ -78,9 +78,61 @@ if cfdata["io"]["i2c"] != None:
     print("Devs:",devs)
     imu = mpu6886.MPU6886(i2c)
 else:
-    raise BaseException("No I2C for IMU")  
+    raise BaseException("No I2C for IMU/Motion")  
+
+# motion driver functions
+# servos at ports S1/left, S2/right
+motorParms = {
+    "left": {"index": 0, "fwd":1,"trim": 0},
+    "right": {"index": 1, "fwd":-1,"trim": 0},
+    "fast": 45,
+    "slow": 30,
+    "stop": 90
+}
 
 
+def motorStop(motor):
+    i2c.writeto(0x38,bytes([motorParms[motor]["index"],motorParms["stop"]]))
+
+def fullStop():
+    motorStop("left")
+    motorStop("right") 
+
+    
+def fwd(motor,speed = "slow"):
+    dir = motorParms[motor]["fwd"]
+    speed = motorParms["slow"] if speed == "slow" else motorParms["fast"]
+    index = motorParms[motor]["index"]
+    i2c.writeto(0x38,bytes([index,motorParms["stop"] + dir * speed]))
+    
+def bwd(motor,speed = "slow"):
+    dir = motorParms[motor]["fwd"]
+    speed = motorParms["slow"] if speed == "slow" else motorParms["fast"]
+    index = motorParms[motor]["index"]
+    i2c.writeto(0x38,bytes([index,motorParms["stop"] - dir * speed]))
+
+def drive(speed = "slow", direction = "fwd"):
+    if direction == "fwd":
+        fwd("left",speed)
+        fwd("right",speed)
+    else:
+        bwd("left",speed)
+        bwd("right",speed)
+       
+    
+def turn(dir = "left"):
+    speed = "slow"  # turn always slow so far
+    if dir == "left":
+        bwd("left",speed)
+        fwd("right",speed)
+    else:
+        fwd("left",speed)
+        bwd("right",speed)
+
+# stop motors    
+fullStop()
+    
+    
 # pairing stuff
 validation_timer = None
 msgBytes = const(4)
@@ -351,6 +403,9 @@ aioble.register_services(temp_service,ctl_service,info_service)
 
 # Helper to encode the sensor values into sint16.
 def _encode_imu(acc,gyro):
+    # acc[1]: positive is down forward, negative if backward
+    # acc[0]: positive is left, negative is right
+    # gyro[2]: positive is right, negative is left
     sensData = struct.pack("<hhhhhh", int(acc[0]*1000),int(acc[1]*1000),int(acc[2]*1000),
                            int(gyro[0]*1000),int(gyro[1]*1000),int(gyro[2]*1000))
     print("Imu:",acc,gyro)
@@ -390,7 +445,7 @@ async def ctl_task():
             try:
                 conn, _value = await ctl_characteristic.written()
                 value = _decode_ctl(_value)[0]
-                #print("Received:", value)
+                print("Received:", value)
                 if value == 1:  # Check if the value is 1 (on)
                     # Code to turn the light on
                     print("ON")
