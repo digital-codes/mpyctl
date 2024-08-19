@@ -1,4 +1,3 @@
-import binascii
 import struct
 import random
 import socket
@@ -63,9 +62,7 @@ def checkMsg(msg):
         decryptor = AES.new(_bleKey, AES.MODE_CBC, IV=b"0000000000000000")
     else:
         decryptor = cryptolib.aes(_bleKey,_cryptMode,b"0000000000000000")
-    encrypted = binascii.unhexlify(msg)
-    #print("Encrypted: ",encrypted,len(encrypted))
-    decrypted = decryptor.decrypt(encrypted)
+    decrypted = decryptor.decrypt(msg)
     # first 16 bytes are garbade due to random IV
     payload = decrypted[16:]
     print("Decrypted: ",payload)
@@ -92,7 +89,7 @@ def checkMsg(msg):
         print("CRC error")
         return False
 
-check = checkMsg(cryptData.hex())
+check = checkMsg(cryptData)
 print("Check:",check)
 
 def sendMsg(msg):
@@ -106,6 +103,6 @@ def sendMsg(msg):
     except Exception as e:
         print("Error sending message:", str(e))
     
-if arch == "host"
+if arch == "host":
     sendMsg(cryptData.hex())
 
