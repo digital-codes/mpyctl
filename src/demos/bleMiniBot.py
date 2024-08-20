@@ -86,7 +86,7 @@ motorParms = {
     "left": {"index": 0, "fwd":1,"trim": 0},
     "right": {"index": 1, "fwd":-1,"trim": 0},
     "fast": 45,
-    "slow": 30,
+    "slow": 20,
     "stop": 90
 }
 
