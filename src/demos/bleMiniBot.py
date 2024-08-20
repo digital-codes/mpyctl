@@ -102,32 +102,28 @@ def fullStop():
 def fwd(motor,speed = "slow"):
     dir = motorParms[motor]["fwd"]
     speed = motorParms["slow"] if speed == "slow" else motorParms["fast"]
+    speed += motorParms[motor]["trim"]
     index = motorParms[motor]["index"]
     i2c.writeto(0x38,bytes([index,motorParms["stop"] + dir * speed]))
     
 def bwd(motor,speed = "slow"):
     dir = motorParms[motor]["fwd"]
     speed = motorParms["slow"] if speed == "slow" else motorParms["fast"]
+    speed += motorParms[motor]["trim"]
     index = motorParms[motor]["index"]
     i2c.writeto(0x38,bytes([index,motorParms["stop"] - dir * speed]))
 
-def drive(speed = "slow", direction = "fwd"):
-    if direction == "fwd":
-        fwd("left",speed)
-        fwd("right",speed)
+def drive(motor = "left", ctl = 0):
+    direction = "fwd" if ctl > 0 else "bwd"
+    if ctl == 0:
+        motorStop(motor)
     else:
-        bwd("left",speed)
-        bwd("right",speed)
+        speed = "slow" if abs(ctl) <= 5 else "fast"
+        if direction == "fwd":
+            fwd(motor,speed)
+        else:
+            bwd(motor,speed)
        
-    
-def turn(dir = "left"):
-    speed = "slow"  # turn always slow so far
-    if dir == "left":
-        bwd("left",speed)
-        fwd("right",speed)
-    else:
-        fwd("left",speed)
-        bwd("right",speed)
 
 # stop motors    
 fullStop()
@@ -408,14 +404,15 @@ def _encode_imu(acc,gyro):
     # gyro[2]: positive is right, negative is left
     sensData = struct.pack("<hhhhhh", int(acc[0]*1000),int(acc[1]*1000),int(acc[2]*1000),
                            int(gyro[0]*1000),int(gyro[1]*1000),int(gyro[2]*1000))
-    print("Imu:",acc,gyro)
+    #print("Imu:",acc,gyro)
     encryptedData = encryptMsgWithIv(sensData)
     return encryptedData
 
 def _decode_ctl(msg):
     # b: unsigned char
     data = decryptMsgWithIv(msg)
-    ctlData = struct.unpack("b", data)
+    ctlData = struct.unpack("<bbbbBBB", data)
+    # print("Ctl:",ctlData)
     return ctlData
 
 
@@ -435,28 +432,30 @@ async def sensor_task():
                 print("sense error")
                 await asyncio.sleep_ms(100)
                 continue
-        await asyncio.sleep_ms(1000)
+        await asyncio.sleep_ms(100)
 
 async def ctl_task():
     global connected
+    global motorParms
     print("Start ctl")
     while True:
         if connected and authorized:
             try:
                 conn, _value = await ctl_characteristic.written()
-                value = _decode_ctl(_value)[0]
-                print("Received:", value)
-                if value == 1:  # Check if the value is 1 (on)
-                    # Code to turn the light on
-                    print("ON")
-                    rgbFill((0,100,0))
-                elif value == 0:  # Check if the value is 0 (off)
-                    # Code to turn the light off
-                    print("OFF")
-                    rgbFill((0,0,30))
-                else:
-                    print("else")
-                    rgbFill((100,0,0))
+                ctl = _decode_ctl(_value)
+                #print("Received:", ctl)
+                col = ctl[6]
+                r = (col & 0xC0) 
+                g = (col & 0x3f) << 2
+                b = (col & 0x03) << 6
+                rgbFill((r,g,b))
+                # decode motor setting
+                # trimming
+                motorParms["left"]["trim"] = ctl[2]
+                motorParms["right"]["trim"] = ctl[3]
+                # motion
+                drive("left",ctl[0])
+                drive("right",ctl[1])
             except:
                 print("ctl error")
                 await asyncio.sleep_ms(100)
