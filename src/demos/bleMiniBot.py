@@ -132,9 +132,9 @@ fullStop()
 def clawAction(ctl):
     print("Claw:",ctl)
     if ctl == 0:
-        i2c.writeto(0x38,bytes([2,55]))
+        i2c.writeto(0x38,bytes([2,85]))
     elif ctl == 180:
-        i2c.writeto(0x38,bytes([2,15]))
+        i2c.writeto(0x38,bytes([2,45]))
         
 def liftAction(ctl):
     print("Lift:",ctl)
