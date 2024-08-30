@@ -127,7 +127,24 @@ def drive(motor = "left", ctl = 0):
 
 # stop motors    
 fullStop()
-    
+
+# actions
+def clawAction(ctl):
+    print("Claw:",ctl)
+    if ctl == 0:
+        i2c.writeto(0x38,bytes([2,55]))
+    elif ctl == 180:
+        i2c.writeto(0x38,bytes([2,15]))
+        
+def liftAction(ctl):
+    print("Lift:",ctl)
+    if ctl == 0:
+        i2c.writeto(0x38,bytes([3,90]))
+    elif ctl == 1:
+        i2c.writeto(0x38,bytes([3,0]))
+    elif ctl == 2:
+        i2c.writeto(0x38,bytes([3,180]))
+        
     
 # pairing stuff
 validation_timer = None
@@ -456,6 +473,8 @@ async def ctl_task():
                 # motion
                 drive("left",ctl[0])
                 drive("right",ctl[1])
+                clawAction(ctl[4])
+                liftAction(ctl[5])
             except:
                 print("ctl error")
                 await asyncio.sleep_ms(100)
