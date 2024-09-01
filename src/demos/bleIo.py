@@ -102,8 +102,8 @@ class DisPlay:
     
     def fill(self, color):
         if self.type == "neopixel":
-            self.neoPixel.fill(color)
-            self.neoPixel.write()
+            self.hardware.fill(color)
+            self.hardware.write()
         elif self.type == "lcd":
             col = self.convertColor(color[0],color[1],color[2])
             self.hardware.fill(col)
