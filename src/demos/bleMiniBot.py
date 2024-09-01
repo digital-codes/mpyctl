@@ -133,7 +133,7 @@ def clawAction(ctl):
     print("Claw:",ctl)
     if ctl == 0:
         i2c.writeto(0x38,bytes([2,45]))
-    elif ctl == 180:
+    else:
         i2c.writeto(0x38,bytes([2,85]))
         
 def liftAction(ctl):
@@ -143,6 +143,9 @@ def liftAction(ctl):
         i2c.writeto(0x38,bytes([3,0]))
     else:
         i2c.writeto(0x38,bytes([3,20]))
+
+clawAction(0)
+liftAction(0)
         
     
 # pairing stuff
