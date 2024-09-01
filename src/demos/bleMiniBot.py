@@ -114,24 +114,11 @@ class DisPlay:
         else:
             return
         
-
-            
-
 RGB = DisPlay(cfdata["io"])
-
-print("RGB:",RGB,RGB.type)
 
 def rgbFill(color):
     global RGB
-    if RGB == None:
-        return
     RGB.fill(color)
-
-#st7789py.color565(100,200,100)
-
-
-def initLcd():
-    return None
 
 
 # imu. on atom mx shared with motion drive
