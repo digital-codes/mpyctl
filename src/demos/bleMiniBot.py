@@ -191,9 +191,9 @@ def liftAction(ctl):
     # 0 is down, close to ground
     print("Lift:",ctl)
     if ctl == 0:
-        i2c.writeto(0x38,bytes([3,0]))
+        i2c.writeto(0x38,bytes([3,5]))
     else:
-        i2c.writeto(0x38,bytes([3,20]))
+        i2c.writeto(0x38,bytes([3,25]))
 
 clawAction(0)
 liftAction(0)
