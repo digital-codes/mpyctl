@@ -136,7 +136,7 @@ else:
 motorParms = {
     "left": {"index": 0, "fwd":1,"trim": 0},
     "right": {"index": 1, "fwd":-1,"trim": 0},
-    "fast": 45,
+    "fast": 40,  # leave some room for trim with scaling
     "slow": 20,
     "stop": 90
 }
@@ -150,30 +150,34 @@ def fullStop():
     motorStop("right") 
 
     
-def fwd(motor,speed = "slow"):
+def fwd(motor,speed = "slow",scale=1):
     dir = motorParms[motor]["fwd"]
     speed = motorParms["slow"] if speed == "slow" else motorParms["fast"]
+    speed *= scale
     speed += motorParms[motor]["trim"]
     index = motorParms[motor]["index"]
     i2c.writeto(0x38,bytes([index,motorParms["stop"] + dir * speed]))
     
-def bwd(motor,speed = "slow"):
+def bwd(motor,speed = "slow",scale=1):
     dir = motorParms[motor]["fwd"]
     speed = motorParms["slow"] if speed == "slow" else motorParms["fast"]
+    speed *= scale
     speed += motorParms[motor]["trim"]
     index = motorParms[motor]["index"]
     i2c.writeto(0x38,bytes([index,motorParms["stop"] - dir * speed]))
 
 def drive(motor = "left", ctl = 0):
+    # normally, we drive 0,5,10. allow scaling with 0,15,20  for lego small wheels
     direction = "fwd" if ctl > 0 else "bwd"
     if ctl == 0:
         motorStop(motor)
     else:
-        speed = "slow" if abs(ctl) <= 5 else "fast"
+        scale = 2 if abs(ctl) > 10 else 1 # scale if ctl > 10
+        speed = "fast" if abs(ctl) % 10 == 0 else "slow"
         if direction == "fwd":
-            fwd(motor,speed)
+            fwd(motor,speed, scale)
         else:
-            bwd(motor,speed)
+            bwd(motor,speed,scale)
        
 
 # stop motors    
