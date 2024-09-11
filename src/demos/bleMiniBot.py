@@ -22,6 +22,9 @@ import neopixel
 import math
 import mpu6886
 
+# tof
+from tof import ToFUnit
+
 
 # config stuff
 _CONF_FILE = "config.json"
@@ -201,6 +204,17 @@ def liftAction(ctl):
 
 clawAction(0)
 liftAction(0)
+
+# distance sensor. tof using separate i2c
+distSensor = None
+try:
+    i2c2 = machine.I2C(1,scl=machine.Pin(cfdata["io"]["pin"][2]),sda=machine.Pin(cfdata["io"]["pin"][3]),freq=400000)
+    assert 0x29 in i2c2.scan()
+    distSensor = ToFUnit(i2c2)
+    print("TOF OK")
+except:
+    print("No TOF")
+    pass
         
     
 # pairing stuff
@@ -482,6 +496,19 @@ def _encode_imu(acc,gyro):
     encryptedData = encryptMsgWithIv(sensData)
     return encryptedData
 
+# Helper to encode the sensor values into sint16.
+def _encode_imu_tof(acc,gyro,tof = 0):
+    # acc[1]: positive is down forward, negative if backward
+    # acc[0]: positive is left, negative is right
+    # gyro[2]: positive is right, negative is left
+    # tof: distance in cm.
+    sensData = struct.pack("<hhhhhhb", int(acc[0]*1000),int(acc[1]*1000),int(acc[2]*1000),
+                           int(gyro[0]*1000),int(gyro[1]*1000),int(gyro[2]*1000),tof)
+    #print("Imu:",acc,gyro)
+    encryptedData = encryptMsgWithIv(sensData)
+    return encryptedData
+
+
 def _decode_ctl(msg):
     # b: unsigned char
     data = decryptMsgWithIv(msg)
@@ -500,7 +527,13 @@ async def sensor_task():
         if connected and authorized:
             # print("Imu ...")
             try:
-                temp_characteristic.write(_encode_imu(imu.acceleration,imu.gyro))
+                if distSensor != None:
+                    dist = round(distSensor.get_distance())
+                    dist = 100 if dist > 100 else dist
+                else:
+                    dist = 0
+                temp_characteristic.write(_encode_imu_tof(imu.acceleration,imu.gyro,dist))
+                #temp_characteristic.write(_encode_imu(imu.acceleration,imu.gyro))
                 temp_characteristic.notify(currentConnection)
             except:
                 print("sense error")
