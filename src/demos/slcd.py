@@ -2,7 +2,8 @@
 
 from machine import Pin, SPI, PWM
 import time
-from tools import st7789py
+#from tools import st7789py
+import st7789py
 from micropython import const
 
 import framebuf
