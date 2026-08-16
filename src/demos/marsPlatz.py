@@ -71,6 +71,7 @@ class MarsPlatz:
                 # set new irq handler
                 self.btn.irq(trigger=machine.Pin.IRQ_FALLING, handler=self.button_pressed)
 
+        self.display = display.DisPlay(self.config)
         
         self.i2c = machine.I2C(1, scl=machine.Pin(I2C_PINS[0]), sda=machine.Pin(I2C_PINS[1]), freq=100000)
         self.light = machine.ADC(machine.Pin(LIGHT_PINS[0]))
@@ -119,6 +120,13 @@ class MarsPlatz:
         # Actual implementation would involve UART communication
         if self.debug:
             print(f"Sending data via LoRa: {data}")
+        # we send the data struct here.
+        # def send_msg(self, confirm, nbtrials, data):
+        # self.lora.send_msg(1, 15, b"01020304abcd")
+        self.lora.send_msg(1, 15, data)
+        r = self.lora.wait_msg()
+        if self.debug:
+            print("LORA Received:", r)
 
 
     def _init_lora(self):
@@ -208,33 +216,60 @@ class MarsPlatz:
 
 
 if __name__ == "__main__":
-    mars_platz = MarsPlatz(debug=True)
+    DEBUG = True
+    mars_platz = MarsPlatz(debug=DEBUG)
+    loopCnt = 0
+    sensor_ID = 11  # Example sensor ID, can be changed as needed 
+    mars_platz.display.fill((100,0,0))
     while True:
+        mars_platz.display.fill((0,0,100))
         light_value = mars_platz.read_light()
         env_data = mars_platz.read_env()
         imu_data = mars_platz.read_imu()
         
         print(f"Light: {light_value}, Env: {env_data}, IMU: {imu_data}")
 
-        time.sleep(3)  # Simulate sensor reading delay
-
-        continue
-    
         # Prepare data for transmission
+        orientation = [int(imu_data["accel"][0] + 16) & 0xff, int(imu_data["accel"][1] + 16) & 0xff, int(imu_data["accel"][2] + 16) & 0xff]
         data_packet = {
-            "light": light_value,
-            "env": env_data,
-            "imu": imu_data
+            "light": int(light_value) // 16,  # Scale down to fit in 8 bits
+            "temp": int(env_data["temperature"]),
+            "pres": int(env_data["pressure"]),
+            "co2": int(env_data["aqi"] // 100),
+            "hum": int(env_data["humidity"]),
+            "imu_x": orientation[0],
+            "imu_y": orientation[1],
+            "imu_z": orientation[2],
+            "cnt": loopCnt
         }
+        if DEBUG:
+            print("Data packet:", data_packet)
+        # convert data_packet to a byte array for transmission
+        data_packet_bytes = struct.pack('>BBhHHBBBBH',
+            sensor_ID,  # Sensor ID                                            
+            data_packet["light"],
+            # Scale down to fit in 8 bits
+            int(data_packet["temp"] * 1),  # Convert to centi-degrees
+            int(data_packet["pres"] * 1),    # Convert to deci-Pascals
+            data_packet["co2"],
+            int(data_packet["hum"] * 1),    # Convert to centi-percent
+            data_packet["imu_x"],
+            data_packet["imu_y"],
+            data_packet["imu_z"],
+            data_packet["cnt"]
+        )
 
         # Send data via LoRa
-        mars_platz.send_lora(data_packet)
+        mars_platz.send_lora(data_packet_bytes)
 
-        # Display data on LCD (if applicable)
-        display.show(data_packet)
+        loopCnt += 1
+
+        mars_platz.display.fill((0,100,0))
+        time.sleep(1)        
+        mars_platz.display.fill((0,0,100))
 
         # Wait before next reading
-        time.sleep(5)        
+        time.sleep(10*60)        
         
         
         
