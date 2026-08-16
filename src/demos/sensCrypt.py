@@ -19,7 +19,7 @@ except ImportError:
 # micropython
 
 
-# sensdata is a bytearray, 32 bytes, forst 16 bytes is crap
+# sensdata is a bytearray, 32 bytes, first 16 bytes is crap
 # upper 16 bytes are filled with values
 def insertSensor(id,temp,hum,pres,cnt,fmt=1,co2=400):
     dset = struct.pack("!BBBBHHHHH",id,fmt,0,0,cnt,temp,hum,co2,pres)
