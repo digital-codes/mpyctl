@@ -29,6 +29,7 @@ import time
 import struct 
 import machine
 import json
+import os
 
 import bme688
 import mpu6886
@@ -225,6 +226,48 @@ if __name__ == "__main__":
     loopCnt = 0
     sensor_ID = 11  # Example sensor ID, can be changed as needed 
     mars_platz.display.fill((100,0,0))
+    
+    imgBuf = bytearray()
+
+    def read_shorts_binary(filename, rows=100, cols=100):
+        global imgBuf
+        try:
+            os.stat(filename)
+        except:
+            print("Image file not found")
+            imgBuf = None
+            return
+        with open(filename, 'rb') as f:
+            num_elements = rows * cols
+            
+            # Read all bytes at once
+            raw_bytes = f.read(num_elements * 2)  # 2 bytes per int16
+            
+            # Unpack all values (little-endian signed short '<h')
+            values = struct.unpack('>' + 'H' * num_elements, raw_bytes)
+            
+            # Reshape into 2D list of uint16 values
+            arr = [list(values[i*cols:(i+1)*cols]) for i in range(rows)]
+            for y in range(100):
+                for x in range(100):
+                    pixval = arr[y][x]
+                    imgBuf.append((pixval >> 8) & 0xff)
+                    imgBuf.append(pixval & 0xff)
+
+
+    def showImage(imgBuf, offs_x = 0, offs_y = 0, shape=(100,100)):
+        if imgBuf is not None:
+            print("Showing image using bit blitting")
+            # def blit_buffer(self, buffer, x, y, width, height):
+            mars_platz.display.blit_buffer(imgBuf, offs_x, offs_y, shape[1], shape[0])
+
+    # try to read image from file
+    read_shorts_binary("marsplatz3.bin",100,100)
+    if imgBuf:
+        print("Image shape: ",len(imgBuf))
+    else:
+        print("Image not found")
+    
     while True:
         mars_platz.display.fill((0,0,100))
         light_value = mars_platz.read_light()
@@ -288,6 +331,8 @@ if __name__ == "__main__":
         mars_platz.display.fill((0,100,0))
         time.sleep(1)        
         mars_platz.display.fill((0,0,100))
+        # show image 
+        showImage(imgBuf,14,14,(100,100))
 
         # Wait before next reading
         for i in range(10 * 60):

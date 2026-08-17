@@ -64,6 +64,12 @@ imgBuf = bytearray()
 
 def read_shorts_binary(filename, rows=100, cols=100):
     global imgBuf
+    try:
+        os.stat(filename)
+    except:
+        print("Image file not found")
+        imgBuf = None
+        return
     with open(filename, 'rb') as f:
         num_elements = rows * cols
         
@@ -80,8 +86,6 @@ def read_shorts_binary(filename, rows=100, cols=100):
                 pixval = arr[y][x]
                 imgBuf.append((pixval >> 8) & 0xff)
                 imgBuf.append(pixval & 0xff)
-    
-    return imgBuf
 
 
 def showImage(imgBuf, offs_x = 0, offs_y = 0, shape=(100,100)):
@@ -92,7 +96,8 @@ def showImage(imgBuf, offs_x = 0, offs_y = 0, shape=(100,100)):
 
 # try to read image from file
 imgBuf = read_shorts_binary("lcdimage.bin",100,100)
-print("Image shape: ",len(imgBuf))
+if imgBuf:
+    print("Image shape: ",len(imgBuf))
 
 while True:
     col = st7789py.color565(100,0,0)

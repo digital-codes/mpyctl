@@ -99,6 +99,15 @@ class DisPlay:
         else:
             return  
 
+
+    def blit_buffer(self, buffer, x, y, width, height):
+        if self.type == "lcd":
+            self.hardware.blit_buffer(buffer, x, y, width, height)
+        else:
+            return
+
+
+
     def text(self, s, x, y):
         if self.type == "lcd":
             text_width = len(s) * self.FONT_WIDTH
