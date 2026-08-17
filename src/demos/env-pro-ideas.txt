@@ -1,0 +1,17 @@
+https://forums.raspberrypi.com/viewtopic.php?t=293793
+https://github.com/octaprog7/BME680
+https://forums.raspberrypi.com/viewtopic.php?t=293793
+
+https://forums.pimoroni.com/t/bme680-observed-gas-ohms-readings/6608
+
+https://community.home-assistant.io/t/bme680-gas-resistance-values/140719
+
+https://github.com/G6EJD/BME680-Example/blob/master/ESP32_bme680_CC_demo_03.ino
+
+https://community.bosch-sensortec.com/mems-sensors-forum-jrmujtaw/post/what-is-iaq-understanding-calibrating-bme688-static-iaq-values-gkP7C8sh37zFJDP
+
+https://forums.pimoroni.com/t/bme680-observed-gas-ohms-readings/6608/19
+
+https://community.home-assistant.io/t/bme680-for-air-quality-usage-and-interpretation/607323
+
+
