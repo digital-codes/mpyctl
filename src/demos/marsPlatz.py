@@ -34,6 +34,8 @@ import bme688
 import mpu6886
 import display
 
+from crcX25 import crc16_x25 as x25crc
+
 from M5_LoraWan import M5_LoRaWAN
 
 _CONF_FILE = "/config.json"
@@ -44,6 +46,8 @@ _LORA_FILE = "/lib/lora.json"
 class MarsPlatz:
     def __init__(self, debug=False):
         self.debug = debug
+        
+        self.interrupt_flag = False
         
         # read config.json first 
         try:
@@ -90,10 +94,11 @@ class MarsPlatz:
         self._init_lora()
 
 
-    # declare button irq handler as static method, so it can be used as a callback
-    @staticmethod
-    def button_pressed(pin):
-        print("Button pressed!",pin)
+    # declare button irq handler as instance method, so it can access self
+    def button_pressed(self, pin):
+        if self.debug:
+            print("Button pressed!", pin)
+        self.interrupt_flag = True
 
 
     def read_light(self):
@@ -245,22 +250,39 @@ if __name__ == "__main__":
         if DEBUG:
             print("Data packet:", data_packet)
         # convert data_packet to a byte array for transmission
-        data_packet_bytes = struct.pack('>BBhHHBBBBH',
+        
+        # old reference: struct.pack("!BBBBHHHHH",id,fmt,0,0,cnt,temp,hum,co2,pres)
+        # ! is network byte order (big-endian), > is explicit big endian 
+        dataFormat = 2 
+        data_packet_bytes = struct.pack('!BBBBHHHHHHHHH',
             sensor_ID,  # Sensor ID                                            
+            dataFormat,  # Data format version
+            0,  # Reserved
+            0,  # Reserved
+            # unsigned short 
+            data_packet["cnt"],
             data_packet["light"],
-            # Scale down to fit in 8 bits
-            int(data_packet["temp"] * 1),  # Convert to centi-degrees
-            int(data_packet["pres"] * 1),    # Convert to deci-Pascals
+            int(data_packet["temp"] + 273),  # add Kelvin conversion
+            int(data_packet["hum"]),
             data_packet["co2"],
-            int(data_packet["hum"] * 1),    # Convert to centi-percent
+            int(data_packet["pres"]),    # Convert to deci-Pascals
+            # new items
             data_packet["imu_x"],
             data_packet["imu_y"],
             data_packet["imu_z"],
-            data_packet["cnt"]
         )
+        crc_ = x25crc(data_packet_bytes)
+        crc = struct.pack("!H",crc_)
+        if DEBUG:
+            print("Data packet bytes:", data_packet_bytes.hex())
+            print("CRC:", hex(crc_))
+        sensData = bytes(list(data_packet_bytes)) + bytes(list(crc))
+        # current format is 22 bytes of data + 2 bytes of CRC = 24 bytes total
+        if DEBUG:
+            print("Final sensData:", sensData.hex(), len(sensData))
 
         # Send data via LoRa
-        mars_platz.send_lora(data_packet_bytes)
+        mars_platz.send_lora(sensData)
 
         loopCnt += 1
 
@@ -269,8 +291,32 @@ if __name__ == "__main__":
         mars_platz.display.fill((0,0,100))
 
         # Wait before next reading
-        time.sleep(10*60)        
+        for i in range(10 * 60):
+            if mars_platz.interrupt_flag:
+                print("Interrupt detected, breaking sleep.")
+                mars_platz.interrupt_flag = False
+                break
+            time.sleep(1)
+        # time.sleep(10*60)  # Removed redundant sleep as the loop above already handles the delay
         
+
+""" CRC check like so
+    payload_format = "!BBBBHHHHHH"
+    payload_sc = struct.unpack(payload_format, payload)
+    print(payload_sc)
+    crc_rx = payload_sc[-1]
+    print("Received CRC: ",crc_rx)
+    # probably arduino library uses x25 crc algorithm
+    crc = x25crc(payload[:14])
+    print("Computed crc:",crc)
+
+    if crc == crc_rx:
+        print("CRC matching")
+        return True
+    else:
+        print("CRC error")
+        return False
+"""
         
         
 """
