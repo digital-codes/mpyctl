@@ -172,8 +172,7 @@ class MarsPlatz:
             print("LoraWan mode:",loraMode)
         #    def config_abp(self, device_eui,device_addr, app_skey, net_skey, ul_dl_mode):
         if loraCfg["mode"].lower() == "abp":
-            self.lora.config_abp(loraCfg["nwparms"]["deveui"],   # Device EUI
-                loraCfg["nwparms"]["devaddr"],
+            self.lora.config_abp(loraCfg["nwparms"]["devaddr"],
                             loraCfg["nwparms"]["appskey"],
                             loraCfg["nwparms"]["nwskey"],
                             "2"  # Upload Download Mode

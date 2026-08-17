@@ -1,6 +1,8 @@
 import machine
 import st7789py
 import time
+import os
+import struct
 
 i2c = machine.I2C(0,scl=machine.Pin(0),sda=machine.Pin(45),freq=400000)
 print(i2c.scan())
@@ -58,6 +60,40 @@ display._set_mem_access_mode(3,0,0,True)
 col = st7789py.color565(100,150,200)
 display.fill(col)
 
+imgBuf = bytearray()
+
+def read_shorts_binary(filename, rows=100, cols=100):
+    global imgBuf
+    with open(filename, 'rb') as f:
+        num_elements = rows * cols
+        
+        # Read all bytes at once
+        raw_bytes = f.read(num_elements * 2)  # 2 bytes per int16
+        
+        # Unpack all values (little-endian signed short '<h')
+        values = struct.unpack('>' + 'H' * num_elements, raw_bytes)
+        
+        # Reshape into 2D list of uint16 values
+        arr = [list(values[i*cols:(i+1)*cols]) for i in range(rows)]
+        for y in range(100):
+            for x in range(100):
+                pixval = arr[y][x]
+                imgBuf.append((pixval >> 8) & 0xff)
+                imgBuf.append(pixval & 0xff)
+    
+    return imgBuf
+
+
+def showImage(imgBuf, offs_x = 0, offs_y = 0, shape=(100,100)):
+    if imgBuf is not None:
+        print("Showing image using bit blitting")
+        # def blit_buffer(self, buffer, x, y, width, height):
+        display.blit_buffer(imgBuf, offs_x, offs_y, shape[1], shape[0])
+
+# try to read image from file
+imgBuf = read_shorts_binary("lcdimage.bin",100,100)
+print("Image shape: ",len(imgBuf))
+
 while True:
     col = st7789py.color565(100,0,0)
     display.fill(col)
@@ -68,6 +104,9 @@ while True:
     col = st7789py.color565(0,0,100)
     display.fill(col)
     time.sleep(1)
+    # show image 
+    showImage(imgBuf,14,14,(100,100))
+    time.sleep(2)
     
 
 

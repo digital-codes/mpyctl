@@ -241,6 +241,10 @@ class ST77xx:
         self.set_window(x, y, x, y)
         self.write(None, self._encode_pixel(color))
 
+    def pixelRaw(self, x, y, pixval):
+        self.set_window(x, y, x, y)
+        self.write(None, bytearray(pixval))
+
     def blit_buffer(self, buffer, x, y, width, height):
         self.set_window(x, y, x + width - 1, y + height - 1)
         self.write(None, buffer)

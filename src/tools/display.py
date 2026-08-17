@@ -93,6 +93,12 @@ class DisPlay:
         else:
             return  
 
+    def pixelRaw(self, x,y,color):
+        if self.type == "lcd":
+            self.hardware.pixel(x,y,color)
+        else:
+            return  
+
     def text(self, s, x, y):
         if self.type == "lcd":
             text_width = len(s) * self.FONT_WIDTH
