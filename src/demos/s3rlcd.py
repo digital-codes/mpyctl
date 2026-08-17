@@ -77,7 +77,7 @@ def read_shorts_binary(filename, rows=100, cols=100):
         raw_bytes = f.read(num_elements * 2)  # 2 bytes per int16
         
         # Unpack all values (little-endian signed short '<h')
-        values = struct.unpack('>' + 'H' * num_elements, raw_bytes)
+        values = struct.unpack('<' + 'H' * num_elements, raw_bytes)
         
         # Reshape into 2D list of uint16 values
         arr = [list(values[i*cols:(i+1)*cols]) for i in range(rows)]
@@ -88,6 +88,7 @@ def read_shorts_binary(filename, rows=100, cols=100):
                 imgBuf.append(pixval & 0xff)
 
 
+
 def showImage(imgBuf, offs_x = 0, offs_y = 0, shape=(100,100)):
     if imgBuf is not None:
         print("Showing image using bit blitting")
@@ -95,7 +96,7 @@ def showImage(imgBuf, offs_x = 0, offs_y = 0, shape=(100,100)):
         display.blit_buffer(imgBuf, offs_x, offs_y, shape[1], shape[0])
 
 # try to read image from file
-imgBuf = read_shorts_binary("lcdimage.bin",100,100)
+read_shorts_binary("lcdimage.bin",100,100)
 if imgBuf:
     print("Image shape: ",len(imgBuf))
 
@@ -111,7 +112,7 @@ while True:
     time.sleep(1)
     # show image 
     showImage(imgBuf,14,14,(100,100))
-    time.sleep(2)
+    time.sleep(5)
     
 
 

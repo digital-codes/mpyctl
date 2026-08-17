@@ -244,7 +244,7 @@ if __name__ == "__main__":
             raw_bytes = f.read(num_elements * 2)  # 2 bytes per int16
             
             # Unpack all values (little-endian signed short '<h')
-            values = struct.unpack('>' + 'H' * num_elements, raw_bytes)
+            values = struct.unpack('<' + 'H' * num_elements, raw_bytes)
             
             # Reshape into 2D list of uint16 values
             arr = [list(values[i*cols:(i+1)*cols]) for i in range(rows)]
@@ -335,7 +335,7 @@ if __name__ == "__main__":
         showImage(imgBuf,14,14,(100,100))
 
         # Wait before next reading
-        for i in range(10 * 60):
+        for i in range(20 * 60):
             if mars_platz.interrupt_flag:
                 print("Interrupt detected, breaking sleep.")
                 mars_platz.interrupt_flag = False
