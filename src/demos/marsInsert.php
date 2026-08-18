@@ -94,7 +94,7 @@ function unpackPayload(array $dataArray)
         'count' => $unpackedShorts[1],
         'pkt' => $unpackedShorts[1], // copy count to pkt for now
         'light' => 255 - $unpackedShorts[2],  // Invert light value to match expected range
-        'temp' => ((float)($unpackedShorts[3]) / 10) - 273.0, // Convert back to Celsius and scale down
+        'temp' => (float)(((float)($unpackedShorts[3]) / 10.0) - 273.0), // Convert back to Celsius and scale down
         'hum' => $unpackedShorts[4],
         'co2' => $unpackedShorts[5],
         'rssi' => null,
@@ -151,7 +151,7 @@ function insertRow(string $dbhost, string $dbname, string $dbuser, string $dbpwd
             ':rfu' => $row['rfu'] ?? 0.0,
             ':count' => $row['count'] ?? null,
             ':light' => $row['light'] ?? null,
-            ':temp' => $row['temp'] ?? null,
+            ':temp' => isset($row['temp']) ? (float)$row['temp'] : null,
             ':hum' => $row['hum'] ?? null,
             ':co2' => $row['co2'] ?? null,
             ':date' => $row['date'] ?? null,

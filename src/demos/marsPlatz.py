@@ -280,7 +280,7 @@ if __name__ == "__main__":
         orientation = [int(imu_data["accel"][0] + 16) & 0xff, int(imu_data["accel"][1] + 16) & 0xff, int(imu_data["accel"][2] + 16) & 0xff]
         data_packet = {
             "light": int(light_value) // 16,  # Scale down to fit in 8 bits
-            "temp": int((env_data["temperature"]) + 273) * 10,  # add Kelvin conversion and scale up
+            "temp": int((float((env_data["temperature"])) + 273.0) * 10.0),  # add Kelvin conversion and scale up
             "pres": int(env_data["pressure"]),
             "co2": int(env_data["aqi"] // 100),
             "hum": int(env_data["humidity"]),
