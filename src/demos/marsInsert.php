@@ -93,8 +93,8 @@ function unpackPayload(array $dataArray)
         'bat' => null,
         'count' => $unpackedShorts[1],
         'pkt' => $unpackedShorts[1], // copy count to pkt for now
-        'light' => $unpackedShorts[2],
-        'temp' => $unpackedShorts[3] - 273, // Convert back to Celsius
+        'light' => 255 - $unpackedShorts[2],  // Invert light value to match expected range
+        'temp' => ((float)($unpackedShorts[3]) / 10) - 273.0, // Convert back to Celsius and scale down
         'hum' => $unpackedShorts[4],
         'co2' => $unpackedShorts[5],
         'rssi' => null,
