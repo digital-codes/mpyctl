@@ -3,7 +3,7 @@ from co2l import CO2LUnit
 from colorRgb import TCS3472
 from M5_LoraWan import M5_LoRaWAN
 from crcX25 import crc16_x25 as x25crc
-from machine import lightsleep, deepsleep, reset
+from machine import deepsleep, reset
 
 
 import json
@@ -29,7 +29,7 @@ class WieseLora:
         self.battery_adc = ADC(BAT_PIN)
         self.config = self.load_config()
         
-        # check battery first. if we  are below 3.8, enter lightsleep for 10 minutes to save power, then retry. If we are below 3.5, enter deep sleep for 1 hour to save power, then retry.
+        # check battery first. if we  are below 3.8, enter sleep for 10 minutes to save power, then retry. If we are below 3.5, enter deep sleep for 1 hour to save power, then retry.
         bat_ok = False
         while not bat_ok:
             bat_voltage = self.get_battery_voltage()
@@ -40,8 +40,8 @@ class WieseLora:
                 deepsleep(60 * 60 * 1000)  # Convert seconds to milliseconds for deep sleep
                 # this gives a reset after 1 hour, and the code will start from the beginning, checking battery voltage again.
             elif bat_voltage < 3.8:
-                print("Battery voltage below 3.8V, entering lightsleep for 10 minutes to save power.")
-                lightsleep(10 * 60 * 1000)  # Convert seconds to milliseconds for lightsleep
+                print("Battery voltage below 3.8V, entering sleep for 30 minutes to save power.")
+                time.sleep(30 * 60)  # Convert seconds to seconds
             else:
                 bat_ok = True
         
@@ -298,7 +298,8 @@ if __name__ == "__main__":
                 wiese.send_lora(payload)
         except Exception as e:
             print("Error in main loop:", e)
-            
-        lightsleep(10 * 60 * 1000)  # Convert seconds to milliseconds for lightsleep
+
+        # don't use lightsleep, corrupts adc readings            
+        time.sleep(20 * 60)  # Wait for 20 minutes before next reading
         
         
