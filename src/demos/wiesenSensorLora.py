@@ -134,7 +134,8 @@ class WieseLora:
             )
         else:
             print("LoraWan mode problem")
-            sys.exit()
+            time.sleep(1)
+            reset()
 
         if self.debug:
             print("LoraWan config finished")
@@ -241,7 +242,8 @@ class WieseLora:
             dataFormat,  # Data format version
             data_packet["bat"],  # Reserved use for battery voltage
             0,  # Reserved
-            # unsigned short 
+            
+            # unsigned short s
             data_packet["cnt"],
             data_packet["light"],
             int(data_packet["temp"]),
