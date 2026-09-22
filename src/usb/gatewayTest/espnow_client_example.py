@@ -1,6 +1,5 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 # espnow_client_example.py
-# Replace the values with /espnow.json from the AtomS3U.
 
 import time
 import json
@@ -8,11 +7,31 @@ import binascii
 import network
 import espnow
 
-S3U_SERVER = "30eda0c9de44"
-S3U_KEY = "cc2747dbf3011774c798f77348969a45"
+# get channel, secret key and server mac from private.py
+import private as pr
+S3U_SERVER = pr.ENOW_SERVER
+S3U_KEY = pr.ENOW_KEY
+WIFI_CHANNEL = pr.ENOW_CHANNEL
+
 SHARED_KEY = bytes.fromhex(S3U_KEY[:32])
 print("Shared key:", SHARED_KEY.hex())
-WIFI_CHANNEL = 5
+
+try:
+    with open("config.json", "r") as f:
+        config = json.load(f)
+        print("Config:", config)
+except Exception as e:
+    print("Failed to load config.json:", e)
+    LMK = None
+
+# set lmk from key
+LMK = bytes.fromhex(config["ble"]["key"]) if "ble" in config and "key" in config["ble"] else None
+if LMK:
+    print("Using secure ESPNOW with LMK:", LMK.hex())
+
+# Test: reset LMK
+LMK = None
+
 
 wlan = network.WLAN(network.WLAN.IF_STA)
 try:
@@ -37,8 +56,14 @@ radio = espnow.ESPNow()
 radio.active(True)
 radio.set_pmk(SHARED_KEY)
 
+
+
+
 SERVER_MAC = bytes.fromhex(S3U_SERVER)
-radio.add_peer(SERVER_MAC, channel=WIFI_CHANNEL)
+if LMK != None:
+    radio.add_peer(SERVER_MAC, LMK, channel=WIFI_CHANNEL)
+else:
+    radio.add_peer(SERVER_MAC, channel=WIFI_CHANNEL)
 
 counter = 0
 while True:

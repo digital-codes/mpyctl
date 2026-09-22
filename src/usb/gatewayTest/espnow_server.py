@@ -9,7 +9,9 @@ import espnow
 import usb_channel_server as ucs
 import time
     
-CHAN = 5
+# get channel
+import private as pr
+WIFI_CHANNEL = pr.ENOW_CHANNEL
 
 # config stuff
 _CONF_FILE = "config.json"
@@ -69,7 +71,7 @@ class ESPNowIngressSensor:
             raise BaseException("No Config")
 
         self.shared_key = bytes.fromhex(config["ble"]["key"])
-        self.wifi_channel = CHAN
+        self.wifi_channel = WIFI_CHANNEL
         self.address = config["wlan"]["addr"]
         
         print("Device ID:", config["id"], "Wi-Fi channel:", ", address: ", self.address, self.wifi_channel, "Shared key:", self.shared_key)

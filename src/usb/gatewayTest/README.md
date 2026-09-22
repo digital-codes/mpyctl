@@ -34,20 +34,9 @@ The Linux TUI successfully receives button events and controls the RGB LED.
 Current implementation:
 
 - Wi-Fi STA is activated before ESP-NOW.
-- Configuration is stored in `/espnow.json`.
-- File is created automatically if missing.
+- Configuration for both server and client is stored in `/private.py`.
 
-Example:
-
-```json
-{
-    "mac": "aa:bb:cc:dd:ee:ff",
-    "shared_key": "00112233445566778899aabbccddeeff",
-    "wifi_channel": 1
-}
-```
-
-ESP-NOW initialization succeeds. Client communication is still to be verified.
+ESP-NOW initialization succeeds. Client send to server verified. Reverse communication is still to be verified.
 
 
 #### "Known Issues / Lessons Learned" 
