@@ -30,7 +30,7 @@ if LMK:
     print("Using secure ESPNOW with LMK:", LMK.hex())
 
 # Test: reset LMK
-LMK = None
+# LMK = None
 
 
 wlan = network.WLAN(network.WLAN.IF_STA)

@@ -164,6 +164,7 @@ cython_debug/
 **/ble_secrets.json
 **/config*.json
 **/cfg*.json
+**/peers.json
 **/private.py
 **/*.log
 

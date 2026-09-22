@@ -9,10 +9,6 @@ import espnow
 import usb_channel_server as ucs
 import time
     
-# get channel
-import private as pr
-WIFI_CHANNEL = pr.ENOW_CHANNEL
-
 # config stuff
 _CONF_FILE = "config.json"
 files = os.listdir("/")
@@ -43,6 +39,7 @@ class ESPNowIngressSensor:
         self.rejected = 0
         self.forward_dropped = 0
         self.debug = debug
+        self.security = True
 
         if self.debug:
             print("ESPNowIngressSensor: initializing")
@@ -71,7 +68,7 @@ class ESPNowIngressSensor:
             raise BaseException("No Config")
 
         self.shared_key = bytes.fromhex(config["ble"]["key"])
-        self.wifi_channel = WIFI_CHANNEL
+        self.wifi_channel = channel_id
         self.address = config["wlan"]["addr"]
         
         print("Device ID:", config["id"], "Wi-Fi channel:", ", address: ", self.address, self.wifi_channel, "Shared key:", self.shared_key)
@@ -108,6 +105,28 @@ class ESPNowIngressSensor:
 
         self.radio.irq(self._irq)
 
+    def setDebug(self, debug):
+        self.debug = debug
+
+    def setSecurity(self, security):
+        self.security = security
+
+    def enableNode(self, mac, lmk=None):
+        """Enable a node with the given MAC address and optional LMK. Use LMK from individual device config BLE key.
+        so server send as receives with LMK as node BLE key.
+        """
+        if lmk is not None:
+            self.radio.add_peer(mac, lmk, channel=self.wifi_channel)
+        else:
+            self.radio.add_peer(mac, channel=self.wifi_channel) 
+        if self.debug:
+            print("Enabled peer:", mac, "LMK:", lmk)
+
+
+    def disableNode(self, mac):
+        self.radio.del_peer(mac)
+        
+
     def close(self):
         try:
             self.radio.irq(None)
@@ -134,6 +153,14 @@ class ESPNowIngressSensor:
             mac, message = self.radio.irecv(0)
             if mac is None:
                 return
+
+            if self.security:
+                try:
+                    self.radio.get_peer(mac)
+                except Exception:
+                    if self.debug:
+                        print("Rejected message from unknown peer:", mac)
+                    return
 
             if self.debug:
                 print("Received message from", mac, "Data:", message)
@@ -182,7 +209,21 @@ class ESPNowIngressSensor:
 
 
 if __name__ == "__main__":
-    sensor = ESPNowIngressSensor(channel_id=CHAN,debug=True, stand_alone=True)
+    # get channel
+    import private as pr
+    WIFI_CHANNEL = pr.ENOW_CHANNEL
+
+    sensor = ESPNowIngressSensor(channel_id=WIFI_CHANNEL,debug=True, stand_alone=True)
+    
+    # add peer with LMK from private.py
+    with open("peers.json", "r") as f:
+        peers = json.load(f)
+        for peer in peers:
+            mac = peer["mac"]
+            lmk = peer["lmk"]
+            print("Enabling peer:", mac, "LMK:", lmk)
+            sensor.enableNode(bytes.fromhex(mac), bytes.fromhex(lmk))
+    
     try:
         while True:
             time.sleep(10)

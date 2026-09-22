@@ -36,6 +36,14 @@ Current implementation:
 - Wi-Fi STA is activated before ESP-NOW.
 - Configuration for both server and client is stored in `/private.py`.
 
+private.py:
+
+>   ENOW_SERVER = \<hex mac address (no : )\>
+    ENOW_KEY = \<16 byte hex key\>
+    ENOW_CHANNEL = \<channel\>
+
+
+
 ESP-NOW initialization succeeds. Client send to server verified. Reverse communication is still to be verified.
 
 
@@ -63,6 +71,7 @@ button_sensor.py
 rgb_sensor.py
 
 espnow_server.py
+private.py  
 
 sensor_test.py
     creates the test sensors
