@@ -162,3 +162,9 @@ cython_debug/
 
 ############## custom ########
 **/ble_secrets.json
+**/config*.json
+**/cfg*.json
+**/private.py
+**/*.log
+
+

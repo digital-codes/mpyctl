@@ -1,0 +1,5 @@
+# /etc/udev/rules.d/70-atoms3u-vendor-usb.rules
+SUBSYSTEM=="usb", \
+ATTR{idVendor}=="303a", \
+ATTR{idProduct}=="4001", \
+TAG+="uaccess"

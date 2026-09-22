@@ -1,0 +1,5 @@
+# /etc/udev/rules.d/70-atoms3u-vendor-usb.rules
+#
+# Permit members of the plugdev group to access the complete AtomS3U device.
+# The CDC ACM interface remains managed by cdc_acm.
+SUBSYSTEM=="usb", ATTR{idVendor}=="303a", ATTR{idProduct}=="4001", MODE="0660", GROUP="plugdev", TAG+="uaccess"
