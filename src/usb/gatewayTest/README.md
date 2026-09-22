@@ -146,6 +146,25 @@ Current keys:
 
 ---
 
+## Prerequisites
+
+The default boot.py only instantiates the gateway server. The TUI cooperates with sensor_test.py
+which must be started manually (unless you use a custom boot.py)
+
+Enter the repl via *mpremote* and start the test
+
+``` 
+import sensor_test
+sensor_test.run()
+```
+
+exit repl with Ctrl-X  (not Ctrl-D) => test keeps running
+
+start sensor_tui
+
+
+
+
 # Debugging
 
 Enable:
