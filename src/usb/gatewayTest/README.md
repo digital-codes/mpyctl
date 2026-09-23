@@ -59,6 +59,12 @@ The ESP-NOW server (gateway mode and stand-alone) reads `/config.json`:
 }
 ```
 
+**Note:** `config.json` is **individual per ESP32 device** (id, keys,
+MAC) and must be created/maintained per device. Provisioning it is
+beyond the scope of this repository — see the
+[mpyctlhost](https://github.com/digital-codes/mpyctlhost) project
+(same GitHub user) for details.
+
 All ESP-NOW code (server and client) uses `private.py`:
 
 >   ENOW_SERVER = \<hex mac address (no : )\> (client only)
@@ -76,7 +82,8 @@ Encryption only works when every peer is registered with the same LMK:
 the server via `enableNode(mac, lmk)` or `peers.json`, the client via
 `radio.add_peer(SERVER_MAC, LMK, ...)`.
 The stand-alone server loads `peers.json`, a list of
-`{"mac": "<hex>", "lmk": "<hex>"}` entries.
+`{"mac": "<hex>", "lmk": "<hex>"}` entries. This file must be provided
+manually — it is device-specific and not kept in git.
 
 To run the client test: copy `client/espnow_client_example.py`,
 `stick/private.py` and `config.json` to a second ESP32 and start it as a
