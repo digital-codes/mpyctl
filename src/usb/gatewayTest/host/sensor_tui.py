@@ -539,7 +539,7 @@ class TUI:
                  % (status["rx_frames"], status["tx_frames"], status["queued"],
                     status["debug"], status["interface_open"]))
 
-        line(3, "Channels: " + ", ".join("%d:%s" % (c.id, c.name) for c in sorted(self.channels.values(), key=lambda x: x.channel_id)))
+        line(3, "Channels: " + ", ".join("%d:%s" % (c.channel_id, c.name) for c in sorted(self.channels.values(), key=lambda x: x.channel_id)))
 
         row = 4
         if self.esp_messages:
