@@ -430,21 +430,16 @@ class TUI:
 
     def send_espnow_message(self, peer_index, message):
         """Send a message to a specific peer via ESP-NOW channel.
-        
+
         Payload format: peer_index:u8 + message:string
         """
         if peer_index >= len(self.peers):
             self.last_error = f"Invalid peer index {peer_index}"
             return False
-        
+
         payload = bytes([peer_index]) + message.encode()
         try:
             self.gateway.send(CHANNEL_ESPNOW, MSG_COMMAND, payload)
-            self.esp_messages.append(
-                "%s -> peer %d: %s"
-                % (time.strftime("%H:%M:%S"), peer_index, message)
-            )
-            self.esp_messages = self.esp_messages[-8:]
             return True
         except Exception as e:
             self.last_error = f"Send failed: {e}"
