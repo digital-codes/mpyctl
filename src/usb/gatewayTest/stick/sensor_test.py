@@ -17,7 +17,7 @@
 
 from button_sensor import DigitalInputSensor
 from rgb_sensor import RGBOutputSensor
-from espnow_server import ESPNowIngressSensor
+from espnow_server import ESPNowRadio
 
 button = None
 rgb = None
@@ -45,7 +45,7 @@ def run(items = ("button", "rgb", "espnow")):
             created.append(rgb)
 
         if "espnow" in items and espnow is None:
-            espnow = ESPNowIngressSensor(3)
+            espnow = ESPNowRadio(3)
             created.append(espnow)
 
         if button is not None:

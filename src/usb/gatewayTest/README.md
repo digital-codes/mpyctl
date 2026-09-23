@@ -34,7 +34,7 @@ The Linux TUI successfully receives button events and controls the RGB LED.
 Current implementation:
 
 - Wi-Fi STA is activated before ESP-NOW (required on ESP32).
-- In gateway mode the ingress sensor registers USB channel 3. The Wi-Fi
+- In gateway mode the radio sensor registers USB channel 3. The Wi-Fi
   channel is always read from `private.py` `ENOW_CHANNEL` and is
   independent of the USB channel number.
 - On-air message: 16-byte shared key header + application data.
@@ -111,7 +111,7 @@ stick/                  AtomS3U MicroPython, installed on the board
                             control channel, debug support
     button_sensor.py        channel 1, GPIO41 input
     rgb_sensor.py           channel 2, GPIO35 NeoPixel output
-    espnow_server.py        channel 3, ESP-NOW ingress
+    espnow_server.py        channel 3, ESP-NOW radio (bi-directional)
     sensor_test.py          creates the test sensors
     manualTest.py           REPL scratch script for manual bring-up
                             (deletes boot.py from the device at the end!)

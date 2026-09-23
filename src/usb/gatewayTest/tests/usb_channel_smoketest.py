@@ -346,7 +346,7 @@ def run_scenario(sync_in):
     assert channels[1].direction == ucs.DIR_IN
     assert channels[2].name == "rgb-led" and channels[2].direction == ucs.DIR_OUT
     assert channels[2].max_packet == 3
-    assert channels[3].name == "espnow-ingress" and channels[3].kind == 3
+    assert channels[3].name == "espnow-radio" and channels[3].kind == 3
     assert channels[3].max_packet == 250
 
     # --- RGB round trip ----------------------------------------------

@@ -43,7 +43,7 @@ if not _CONF_FILE in files:
     raise BaseException("No Config")
 
 
-class ESPNowIngressSensor:
+class ESPNowRadio:
     """ESP-NOW receiver bridging peer messages onto a USB gateway channel.
 
     channel_id is the USB gateway channel number only (KIND 3, DIR_IN);
@@ -58,7 +58,7 @@ class ESPNowIngressSensor:
     def __init__(
         self,
         channel_id,
-        name="espnow-ingress",
+        name="espnow-radio",
         gateway=None,
         debug = False,
         stand_alone=False
@@ -77,11 +77,11 @@ class ESPNowIngressSensor:
         self.security = True
 
         if self.debug:
-            print("ESPNowIngressSensor: initializing")
+            print("ESPNowRadio: initializing")
             if self.gateway:
-                print("ESPNowIngressSensor: gateway:", self.gateway)
+                print("ESPNowRadio: gateway:", self.gateway)
             else:
-                print("ESPNowIngressSensor: stand-alone mode")
+                print("ESPNowRadio: stand-alone mode")
 
         # disconnect from any existing wifi connection, if any
         try:
@@ -119,7 +119,7 @@ class ESPNowIngressSensor:
             pass
 
         if self.debug:
-            print("ESPNowIngressSensor: wlan config:", self.wlan.config("channel"), self.wlan.config("mac"))
+            print("ESPNowRadio: wlan config:", self.wlan.config("channel"), self.wlan.config("mac"))
 
         self.radio = espnow.ESPNow()
         # ESP-NOW must be initialized before config() and set_pmk().
@@ -367,7 +367,7 @@ class ESPNowIngressSensor:
 if __name__ == "__main__":
     # channel_id is the USB channel number and unused without a gateway;
     # the Wi-Fi channel comes from private.py ENOW_CHANNEL (see above).
-    sensor = ESPNowIngressSensor(channel_id=3, debug=True, stand_alone=True)
+    sensor = ESPNowRadio(channel_id=3, debug=True, stand_alone=True)
     
     # add peer with LMK from private.py
     with open("peers.json", "r") as f:
