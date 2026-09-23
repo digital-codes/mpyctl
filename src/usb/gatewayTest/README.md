@@ -218,7 +218,9 @@ Current keys:
 - d : Toggle device debug
 - s : Refresh gateway status (RX/TX counters update)
 - c : Refresh channel list (only needed when channels change dynamically)
-- x : Clear debug log
+- d : Toggle debug mode (shows debug events in log)
+- x : Clear debug log (count shown in status line as "log=N")
+- v : View debug log (via REPL, see Debugging section)
 - m : Send ESP-NOW message (prompts for peer and message)
 - q : Quit
 
@@ -260,6 +262,9 @@ frames with synchronous and asynchronous USB IN completion.
 ---
 
 # Debugging
+
+From TUI: press `x` to clear the debug log (count shown in status line as "log=N").
+To view the log, connect via REPL and use:
 
 Enable:
 
