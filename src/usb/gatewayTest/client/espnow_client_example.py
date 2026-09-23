@@ -6,6 +6,8 @@
 # Sends a short test message to the server every 5 seconds:
 #   on-air payload = 16-byte shared key header + "sensor message <n>"
 #
+# Also receives messages from the server and prints them.
+#
 # Configuration:
 #   private.py   : ENOW_SERVER (server MAC hex), ENOW_KEY (hex, its first
 #                  16 bytes become the PMK and the message header),
@@ -22,6 +24,7 @@ import json
 import binascii
 import network
 import espnow
+import micropython
 
 # get channel, secret key and server mac from private.py
 import private as pr
@@ -72,8 +75,45 @@ radio = espnow.ESPNow()
 radio.active(True)
 radio.set_pmk(SHARED_KEY)
 
+# Receive state
+irq_pending = False
+received_count = 0
 
+def _irq(radio):
+    """ESP-NOW IRQ - schedule receive processing."""
+    global irq_pending
+    if irq_pending:
+        return
+    irq_pending = True
+    try:
+        micropython.schedule(_drain, 0)
+    except RuntimeError:
+        irq_pending = False
 
+def _drain(ignored):
+    """Drain the ESP-NOW receive buffer and print messages."""
+    global irq_pending, received_count
+    irq_pending = False
+    
+    while True:
+        mac, message = radio.irecv(0)
+        if mac is None:
+            return
+        
+        # Check if message has the shared key header
+        if len(message) >= 16 and message[:16] == SHARED_KEY:
+            application_data = message[16:]
+            print("\n*** Received from", mac.hex(), "***")
+            print("    Data:", application_data.decode())
+            received_count += 1
+        else:
+            print("\n*** Received from", mac.hex(), "(no valid header) ***")
+            print("    Data:", message)
+
+# Enable receive IRQ
+radio.irq(_irq)
+
+print("Receive handler enabled")
 
 SERVER_MAC = bytes.fromhex(S3U_SERVER)
 if LMK != None:

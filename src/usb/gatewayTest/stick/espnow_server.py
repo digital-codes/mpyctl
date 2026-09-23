@@ -238,6 +238,47 @@ class ESPNowIngressSensor:
                 if self.debug:
                     print("Received message from", mac, "RSSI:", rssi, "Data:", application_data)
 
+    def send_to_peer(self, mac, message):
+        """Send a message to a specific peer. Returns True on success."""
+        if self.debug:
+            print("Sending to", mac, "Message:", message)
+        try:
+            result = self.radio.send(mac, message)
+            if self.debug:
+                print("Send result:", result)
+            return result
+        except Exception as e:
+            if self.debug:
+                print("Send error:", e)
+            return False
+
+    def send_to_all_peers(self, message):
+        """Send a message to all registered peers. Returns number of successful sends."""
+        success_count = 0
+        try:
+            peers = self.radio.peers_table
+            for mac in peers:
+                if self.send_to_peer(mac, message):
+                    success_count += 1
+        except Exception as e:
+            if self.debug:
+                print("Error sending to all peers:", e)
+        return success_count
+
+    def get_peer_count(self):
+        """Return the number of registered peers."""
+        try:
+            return len(self.radio.peers_table)
+        except Exception:
+            return 0
+
+    def get_peer_macs(self):
+        """Return a list of registered peer MAC addresses."""
+        try:
+            return list(self.radio.peers_table.keys())
+        except Exception:
+            return []
+
     def stats(self):
         """Configuration plus receive/reject/drop counters and radio stats."""
         return {
@@ -267,8 +308,24 @@ if __name__ == "__main__":
             print("Enabling peer:", mac, "LMK:", lmk)
             sensor.enableNode(bytes.fromhex(mac), bytes.fromhex(lmk))
     
+    send_counter = 0
     try:
         while True:
+            # Send a message to each enabled peer
+            peer_macs = sensor.get_peer_macs()
+            if peer_macs:
+                print(f"\n--- Sending to {len(peer_macs)} peers (counter={send_counter}) ---")
+                for idx, mac in enumerate(peer_macs):
+                    # Create message with peer index and message count
+                    msg = f"server msg {idx} {send_counter}".encode()
+                    # Prepend shared key header for consistency with protocol
+                    payload = sensor.shared_key[:16] + msg
+                    print(f"Sending to peer {idx} ({mac.hex()}): {msg.decode()}")
+                    sensor.send_to_peer(mac, payload)
+            else:
+                print("No peers registered, skipping send")
+            
+            send_counter += 1
             time.sleep(10)
             print(sensor.stats())
     except KeyboardInterrupt:

@@ -45,7 +45,7 @@ Testing status (2026-09-23):
 
 - **Client to server is verified, with encryption, when the LMK is set.**
   `espnow_client_example.py` runs on a second ESP32 board.
-- Server to client is still to be verified.
+- **Server to client is implemented (pending verification).**
 
 #### Configuration
 
@@ -282,7 +282,7 @@ sensor events.
 
 # Next steps
 
-- Verify ESP-NOW server to client communication.
+- Verify ESP-NOW server to client communication (in progress).
 - Add sensor base class.
 - Add I²C sensor channels.
 - Add SPI sensor channels.
