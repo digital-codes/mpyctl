@@ -10,12 +10,13 @@
 import machine
 import neopixel
 import usb_channel_server as ucs
+from common.channel_defs import KIND_OUTPUT, DIR_OUT, MSG_COMMAND, MSG_RESPONSE
 
 
 class RGBOutputSensor:
     """Single-pixel NeoPixel sink on a USB gateway channel (KIND 2)."""
 
-    KIND = 2
+    KIND = KIND_OUTPUT
 
     def __init__(
         self,
@@ -35,7 +36,7 @@ class RGBOutputSensor:
         self.gateway.register_channel(
             channel_id,
             self.KIND,
-            ucs.DIR_OUT,
+            DIR_OUT,
             3,
             name,
             self._handle,
@@ -50,7 +51,7 @@ class RGBOutputSensor:
 
     def _handle(self, msg_type, payload):
         """Channel handler: apply a 3-byte COMMAND and respond with the color."""
-        if msg_type != ucs.MSG_COMMAND:
+        if msg_type != MSG_COMMAND:
             raise ValueError("RGB channel accepts COMMAND only")
         if len(payload) != 3:
             raise ValueError("RGB payload must be exactly 3 bytes")
@@ -60,7 +61,7 @@ class RGBOutputSensor:
 
         self.gateway.send(
             self.channel_id,
-            ucs.MSG_RESPONSE,
+            MSG_RESPONSE,
             bytes(self.rgb),
         )
 

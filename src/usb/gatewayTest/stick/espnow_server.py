@@ -32,6 +32,10 @@ import network
 import espnow
 import private as pr
 import usb_channel_server as ucs
+import sys
+import os as os_mod
+sys.path.insert(0, os_mod.path.join(os_mod.path.dirname(__file__), ".."))
+from common.channel_defs import KIND_BIDI, DIR_BIDI, MSG_EVENT, MSG_COMMAND, MSG_PEER_ADD, MSG_PEER_DEL
 import time
     
 # config stuff
@@ -52,7 +56,7 @@ class ESPNowIngressSensor:
     counted and optionally printed.
     """
 
-    KIND = 3
+    KIND = KIND_BIDI
 
     def __init__(
         self,
@@ -130,7 +134,7 @@ class ESPNowIngressSensor:
             self.gateway.register_channel(
                 channel_id,
                 self.KIND,
-                ucs.DIR_BIDI,
+                DIR_BIDI,
                 250,
                 name,
                 self._handle_outbound,
@@ -226,7 +230,7 @@ class ESPNowIngressSensor:
             if self.gateway:
                 if self.gateway.send(
                     self.channel_id,
-                    ucs.MSG_EVENT,
+                    MSG_EVENT,
                     payload,
                     raise_on_full=False,
                 ):
@@ -241,32 +245,59 @@ class ESPNowIngressSensor:
     def _handle_outbound(self, msg_type, payload):
         """Handle outbound messages from the host.
 
-        Payload format: peer_index:u8 + message:string
-        Sends the message to the specified peer via ESP-NOW.
+        MSG_COMMAND payload: peer_index:u8 + message:string
+        MSG_PEER_ADD payload: mac:6-bytes + lmk:16-bytes (optional)
+        MSG_PEER_DEL payload: mac:6-bytes
         """
-        if msg_type == ucs.MSG_COMMAND:
+        if msg_type == MSG_COMMAND:
             if len(payload) < 1:
                 if self.debug:
                     print("Outbound: no peer index specified")
                 return
-            
+
             peer_index = payload[0]
             message = payload[1:].decode("utf-8", "replace")
-            
+
             peer_macs = self.get_peer_macs()
             if peer_index >= len(peer_macs):
                 if self.debug:
                     print(f"Outbound: invalid peer index {peer_index} (max {len(peer_macs)-1})")
                 return
-            
+
             mac = peer_macs[peer_index]
-            # Prepend shared key header for consistency
             full_payload = self.shared_key[:16] + message.encode()
-            
+
             if self.debug:
                 print(f"Outbound to peer {peer_index} ({mac.hex()}): {message}")
-            
+
             self.send_to_peer(mac, full_payload)
+
+        elif msg_type == MSG_PEER_ADD:
+            if len(payload) < 6:
+                if self.debug:
+                    print("Outbound: peer_add requires at least 6 bytes (MAC)")
+                return
+
+            mac = bytes(payload[:6])
+            lmk = bytes(payload[6:22]) if len(payload) >= 22 else None
+
+            if self.debug:
+                print(f"Outbound: adding peer {mac.hex()} with LMK: {lmk.hex() if lmk else 'None'}")
+
+            self.enableNode(mac, lmk)
+
+        elif msg_type == MSG_PEER_DEL:
+            if len(payload) < 6:
+                if self.debug:
+                    print("Outbound: peer_del requires 6 bytes (MAC)")
+                return
+
+            mac = bytes(payload[:6])
+
+            if self.debug:
+                print(f"Outbound: removing peer {mac.hex()}")
+
+            self.disableNode(mac)
 
     def send_to_peer(self, mac, message):
         """Send a message to a specific peer. Returns True on success."""

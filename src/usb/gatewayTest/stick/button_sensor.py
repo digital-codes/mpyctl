@@ -14,6 +14,7 @@ import time
 import machine
 import micropython
 import usb_channel_server as ucs
+from common.channel_defs import KIND_INPUT, DIR_IN, MSG_EVENT
 
 
 class DigitalInputSensor:
@@ -24,7 +25,7 @@ class DigitalInputSensor:
     and unregister the channel.
     """
 
-    KIND = 1
+    KIND = KIND_INPUT
 
     def __init__(
         self,
@@ -54,7 +55,7 @@ class DigitalInputSensor:
         self.gateway.register_channel(
             channel_id,
             self.KIND,
-            ucs.DIR_IN,
+            DIR_IN,
             1,
             name,
             None,
@@ -117,7 +118,7 @@ class DigitalInputSensor:
         )
         self.gateway.send(
             self.channel_id,
-            ucs.MSG_EVENT,
+            MSG_EVENT,
             bytes((1 if pressed else 0,)),
             raise_on_full=False,
         )

@@ -26,6 +26,7 @@ import json
 import os
 import queue
 import signal
+import sys
 import threading
 import time
 from dataclasses import dataclass
@@ -34,32 +35,35 @@ from typing import Optional
 import usb.core
 import usb.util
 
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "common"))
+from channel_defs import (
+    MSG_COMMAND,
+    MSG_RESPONSE,
+    MSG_EVENT,
+    MSG_CHANNEL_LIST_REQUEST,
+    MSG_CHANNEL_LIST_RESPONSE,
+    MSG_CHANNEL_ADDED,
+    MSG_CHANNEL_REMOVED,
+    MSG_ERROR,
+    MSG_PING,
+    MSG_PONG,
+    MSG_STATUS,
+    MSG_PEER_ADD,
+    MSG_PEER_DEL,
+    CTRL_SET_DEBUG,
+    CTRL_GET_STATUS,
+    CTRL_CLEAR_DEBUG,
+    CHANNEL_CONTROL,
+    CHANNEL_BUTTON,
+    CHANNEL_RGB,
+    CHANNEL_ESPNOW,
+)
+
 VID = 0x303A
 PID = 0x4001
 INTERFACE = 2
 EP_OUT = 0x03
 EP_IN = 0x83
-
-MSG_COMMAND = 0x02
-MSG_RESPONSE = 0x03
-MSG_EVENT = 0x04
-MSG_CHANNEL_LIST_REQUEST = 0x05
-MSG_CHANNEL_LIST_RESPONSE = 0x06
-MSG_CHANNEL_ADDED = 0x07
-MSG_CHANNEL_REMOVED = 0x08
-MSG_ERROR = 0x09
-MSG_PING = 0x0A
-MSG_PONG = 0x0B
-MSG_STATUS = 0x0C
-
-CTRL_SET_DEBUG = 0x01
-CTRL_GET_STATUS = 0x02
-CTRL_CLEAR_DEBUG = 0x03
-
-CHANNEL_CONTROL = 0
-CHANNEL_BUTTON = 1
-CHANNEL_RGB = 2
-CHANNEL_ESPNOW = 3
 
 
 @dataclass
@@ -374,18 +378,39 @@ class TUI:
         self._load_peers()
 
     def _load_peers(self):
-        """Load peers from peers.json in the stick directory."""
+        """Load peers from peers.json in the stick directory and send to device."""
         try:
             peers_path = os.path.normpath(self.PEERS_PATH)
             if os.path.exists(peers_path):
                 with open(peers_path, "r") as f:
                     self.peers = json.load(f)
                 print(f"Loaded {len(self.peers)} peers from {peers_path}")
+                self._send_peers_to_device()
             else:
                 print(f"Peers file not found: {peers_path}")
         except Exception as e:
             print(f"Failed to load peers: {e}")
             self.peers = []
+
+    def _send_peers_to_device(self):
+        """Send all peers to the ESP-NOW server via peer_add messages."""
+        if self.gateway is None:
+            return
+        for peer in self.peers:
+            try:
+                mac_hex = peer.get("mac", "")
+                lmk_hex = peer.get("lmk", "")
+                mac = bytes.fromhex(mac_hex)
+                lmk = bytes.fromhex(lmk_hex) if lmk_hex else None
+
+                payload = mac
+                if lmk:
+                    payload += lmk
+
+                self.gateway.send(CHANNEL_ESPNOW, MSG_PEER_ADD, payload)
+                print(f"Sent peer_add for {mac_hex}")
+            except Exception as e:
+                print(f"Failed to send peer_add for {peer.get('mac')}: {e}")
 
     def send_control(self, command, argument=None):
         """Send a CTRL_* command on the control channel."""

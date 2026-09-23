@@ -11,8 +11,9 @@ must be identical.
 
 Checks: framing/ping/channel-list/status/RGB round trip/button events,
 drain continuing past unknown peers, the ESP-NOW init log line format,
-sensor_test.run() repairing a partially stopped sensor set, and the
-Wi-Fi channel coming from private.py (decoupled from the USB channel id).
+sensor_test.run() repairing a partially stopped sensor set, the
+Wi-Fi channel coming from private.py (decoupled from the USB channel id),
+and peer_add/peer_del message handling.
 
 Run with: python3 tests/usb_channel_smoketest.py
 """
@@ -26,6 +27,8 @@ import tempfile
 import types
 from contextlib import redirect_stdout
 
+DEBUG = True
+
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)                      # gatewayTest/
 STICK = os.path.join(ROOT, "stick")               # AtomS3U MicroPython
@@ -33,6 +36,11 @@ HOST = os.path.join(ROOT, "host")                 # Linux TUI
 
 WIFI_CHANNEL = 6          # pretend private.ENOW_CHANNEL (must NOT equal channel id 3)
 SHARED_KEY = bytes.fromhex("00112233445566778899aabbccddeeff")
+
+
+def debug(*args, **kwargs):
+    if DEBUG:
+        print("[DEBUG]", *args, **kwargs)
 
 # config.json is opened relative to the cwd: use a scratch directory
 WORKDIR = tempfile.mkdtemp(prefix="mpyctl-smoke-")
@@ -289,7 +297,10 @@ def run_scenario(sync_in):
         trace.extend(frames)
         return frames
 
+    debug(f"=== Starting scenario (sync_in={sync_in}) ===")
+
     # --- sensor creation + init log line ------------------------------
+    debug("Creating sensors...")
     mark = h.mark()
     buf = io.StringIO()
     with redirect_stdout(buf):
@@ -301,6 +312,7 @@ def run_scenario(sync_in):
 
     st = sensor_test
     assert st.button is not None and st.rgb is not None and st.espnow is not None
+    debug(f"Sensors created: button={st.button is not None}, rgb={st.rgb is not None}, espnow={st.espnow is not None}")
 
     # Wi-Fi channel from private.py, USB channel stays 3
     assert st.espnow.wifi_channel == WIFI_CHANNEL, st.espnow.wifi_channel
@@ -314,11 +326,13 @@ def run_scenario(sync_in):
     assert (1, ucs.MSG_EVENT, b"\x00") in add_events  # initial button release
 
     # --- ping ---------------------------------------------------------
+    debug("Testing ping...")
     mark = h.mark()
     h.inject(0, ucs.MSG_PING)
     assert take(mark) == [(0, ucs.MSG_PONG, b"AS3U\x01")]
 
     # --- channel list, host-side parsed -------------------------------
+    debug("Testing channel list...")
     mark = h.mark()
     h.inject(0, ucs.MSG_CHANNEL_LIST_REQUEST)
     frames = take(mark)
@@ -334,6 +348,7 @@ def run_scenario(sync_in):
     assert channels[3].max_packet == 250
 
     # --- RGB round trip ----------------------------------------------
+    debug("Testing RGB round trip...")
     mark = h.mark()
     h.inject(2, ucs.MSG_COMMAND, b"\x01\x02\x03")
     assert take(mark) == [(2, ucs.MSG_RESPONSE, b"\x01\x02\x03")]
@@ -341,8 +356,10 @@ def run_scenario(sync_in):
     tui = sensor_tui.TUI(None)
     tui.handle_frame(2, ucs.MSG_RESPONSE, b"\x01\x02\x03")
     assert tui.rgb == (1, 2, 3)
+    debug("RGB test passed")
 
     # --- button debounce + event --------------------------------------
+    debug("Testing button debounce...")
     mark = h.mark()
     st.button.pin.value(0)          # press (active low)
     st.button._poll(None)           # raw edge, start debounce
@@ -350,8 +367,11 @@ def run_scenario(sync_in):
     st.button._poll(None)           # stable -> emit
     frames = take(mark)
     assert (1, ucs.MSG_EVENT, b"\x01") in frames, frames
+    debug("Button test passed")
 
     # --- status + debug toggle, host-side parsed ----------------------
+    debug("Testing status and debug toggle...")
+    mark = h.mark()
     mark = h.mark()
     h.inject(0, ucs.MSG_COMMAND, bytes((ucs.CTRL_GET_STATUS,)))
     frames = take(mark)
@@ -366,6 +386,7 @@ def run_scenario(sync_in):
     assert sensor_tui.parse_status(frames[0][2])["debug"]
 
     # --- drain continues past unknown peers ---------------------------
+    debug("Testing drain past unknown peers...")
     mac_unknown = bytes.fromhex("deadbeef0001")
     mac_peer = bytes.fromhex("aabbccddeeff")
     e = st.espnow
@@ -385,6 +406,40 @@ def run_scenario(sync_in):
     assert e.received == 1
     tui.handle_frame(3, ucs.MSG_EVENT, payload)
     assert "hello" in tui.esp_messages[-1] and "RSSI -55" in tui.esp_messages[-1]
+    debug("Drain test passed")
+
+    # --- peer_add and peer_del via USB channel -------------------------
+    debug("Testing MSG_PEER_ADD and MSG_PEER_DEL...")
+    e = st.espnow
+    assert e.get_peer_count() == 1, "should have 1 peer (mac_peer)"
+
+    # Send MSG_PEER_ADD to add a new peer
+    debug("Testing peer_add via USB channel...")
+    mac_new = bytes.fromhex("112233445566")
+    lmk_new = bytes.fromhex("aabbccddeeff00112233445566778899aabb")
+    debug(f"Current peer count before: {e.get_peer_count()}")
+    mark = h.mark()
+    h.inject(3, ucs.MSG_PEER_ADD, mac_new + lmk_new)
+    take(mark)
+    assert e.get_peer_count() == 2, "should have 2 peers after peer_add"
+    assert mac_new in e.get_peer_macs(), "new peer should be registered"
+    debug(f"After peer_add: {e.get_peer_count()} peers")
+
+    # Send MSG_PEER_DEL to remove a peer
+    mark = h.mark()
+    h.inject(3, ucs.MSG_PEER_DEL, mac_new)
+    take(mark)
+    assert e.get_peer_count() == 1, "should have 1 peer after peer_del"
+    assert mac_new not in e.get_peer_macs(), "peer should be removed"
+    debug(f"After peer_del: {e.get_peer_count()} peers")
+
+    # Test peer_add without LMK (uses default)
+    mac_no_lmk = bytes.fromhex("ffeeddccbbaa")
+    mark = h.mark()
+    h.inject(3, ucs.MSG_PEER_ADD, mac_no_lmk)
+    take(mark)
+    assert mac_no_lmk in e.get_peer_macs(), "peer without LMK should be added"
+    debug(f"After peer_add (no LMK): {e.get_peer_count()} peers")
 
     # --- run() repairs a partially stopped set ------------------------
     b0, r0 = st.button, st.rgb
@@ -428,6 +483,7 @@ def run_scenario(sync_in):
     st.stop()
     h.flush()
     assert 1 not in h.server.channels and 2 not in h.server.channels
+    debug("=== Scenario complete ===")
     return trace
 
 

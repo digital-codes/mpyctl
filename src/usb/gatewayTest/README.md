@@ -79,11 +79,11 @@ along with `client/espnow_client_example.py`. It is not in git
 `espnow_client_example.py` additionally uses `config.json` `ble.key` as
 the LMK for encrypted unicast.
 Encryption only works when every peer is registered with the same LMK:
-the server via `enableNode(mac, lmk)` or `peers.json`, the client via
-`radio.add_peer(SERVER_MAC, LMK, ...)`.
-The stand-alone server loads `peers.json`, a list of
-`{"mac": "<hex>", "lmk": "<hex>"}` entries. This file must be provided
-manually — it is device-specific and not kept in git.
+the server via `enableNode(mac, lmk)` or `MSG_PEER_ADD` from host, the
+client via `radio.add_peer(SERVER_MAC, LMK, ...)`.
+The host loads `peers.json`, a list of `{"mac": "<hex>", "lmk": "<hex>"}`
+entries, and sends `MSG_PEER_ADD` to the gateway. This file must be
+provided manually — it is device-specific and not kept in git.
 
 To run the client test: copy `client/espnow_client_example.py`,
 `stick/private.py` and `config.json` to a second ESP32 and start it as a
@@ -100,6 +100,10 @@ that it's worth documenting prominently for future maintenance.
 # Software structure
 
 ```
+common/                 Shared constants between host and stick
+    channel_defs.py        Message types, channel kinds, directions,
+                            control commands
+
 stick/                  AtomS3U MicroPython, installed on the board
     boot.py                 USB enumeration only
     usb_channel_server.py   USB transport, framing, channel management,
@@ -113,7 +117,7 @@ stick/                  AtomS3U MicroPython, installed on the board
     config.json             shared key / LMK, device id, own MAC
     private.py              Wi-Fi channel (ENOW_CHANNEL), secrets;
                             also needed by client/ (see above)
-    peers.json              stand-alone ESP-NOW testing only
+    peers.json              peer MAC/LMK definitions (loaded by host)
 
 host/                   Linux host application
     sensor_tui.py           curses UI (pyusb)
@@ -125,6 +129,15 @@ tests/                  host-side smoke test (stubs the MicroPython
                         modules; run: python3 tests/usb_channel_smoketest.py)
     usb_channel_smoketest.py
 ```
+
+## ESP-NOW Peer Management
+
+Peers are defined in `peers.json` in the stick directory. When the host TUI
+starts, it loads this file and sends `MSG_PEER_ADD` messages to the ESP-NOW
+channel to register each peer with the gateway. The payload format is:
+
+- `MSG_PEER_ADD`: 6-byte MAC + optional 16-byte LMK
+- `MSG_PEER_DEL`: 6-byte MAC (removes peer from gateway)
 
 Sensor modules never import `boot.py`.
 
@@ -140,14 +153,18 @@ gateway = usb_channel_server.get_gateway()
 
 # Device installation
 
-Copy the contents of `stick/`:
+Copy the contents of `stick/` and `common/`:
 
+From `stick/`:
 - boot.py
 - usb_channel_server.py
 - button_sensor.py
 - rgb_sensor.py
 - espnow_server.py
 - sensor_test.py
+
+From `common/`:
+- channel_defs.py
 
 to the board. Add `config.json` and `private.py` (see the ESP-NOW
 configuration section) if the ESP-NOW sensor is used; `espnow_server.py`

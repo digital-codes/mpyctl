@@ -20,31 +20,34 @@
 # is submitted. See the README "Important implementation detail" section.
 
 import time
+import sys
+import os
 
-MSG_DATA = 0x01
-MSG_COMMAND = 0x02
-MSG_RESPONSE = 0x03
-MSG_EVENT = 0x04
-MSG_CHANNEL_LIST_REQUEST = 0x05
-MSG_CHANNEL_LIST_RESPONSE = 0x06
-MSG_CHANNEL_ADDED = 0x07
-MSG_CHANNEL_REMOVED = 0x08
-MSG_ERROR = 0x09
-MSG_PING = 0x0A
-MSG_PONG = 0x0B
-MSG_STATUS = 0x0C
-
-KIND_CONTROL = 0
-
-DIR_IN = 1
-DIR_OUT = 2
-DIR_BIDI = 3
-
-CHANNEL_CONTROL = 0
-
-CTRL_SET_DEBUG = 0x01
-CTRL_GET_STATUS = 0x02
-CTRL_CLEAR_DEBUG = 0x03
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+from common.channel_defs import (
+    MSG_DATA,
+    MSG_COMMAND,
+    MSG_RESPONSE,
+    MSG_EVENT,
+    MSG_CHANNEL_LIST_REQUEST,
+    MSG_CHANNEL_LIST_RESPONSE,
+    MSG_CHANNEL_ADDED,
+    MSG_CHANNEL_REMOVED,
+    MSG_ERROR,
+    MSG_PING,
+    MSG_PONG,
+    MSG_STATUS,
+    MSG_PEER_ADD,
+    MSG_PEER_DEL,
+    KIND_CONTROL,
+    DIR_IN,
+    DIR_OUT,
+    DIR_BIDI,
+    CHANNEL_CONTROL,
+    CTRL_SET_DEBUG,
+    CTRL_GET_STATUS,
+    CTRL_CLEAR_DEBUG,
+)
 
 _default_gateway = None
 
@@ -409,7 +412,7 @@ class USBChannelServer:
 
             plausible = (
                 channel_id != 255
-                and 1 <= msg_type <= MSG_STATUS
+                and 1 <= msg_type <= MSG_PEER_DEL
                 and length <= self.max_payload
             )
             if not plausible:
