@@ -9,6 +9,14 @@
 #   4. loads usb_channel_server and attaches it to the configured USB device.
 #
 # It contains no sensor-specific code.
+#
+# USB layout:
+#   interface 0/1 : MicroPython CDC REPL
+#   interface 2   : vendor-specific bulk interface (EP 0x03 OUT, EP 0x83 IN)
+#
+# All callbacks registered with USBD.config() are static proxies that
+# forward to the USBChannelServer object once it exists; this keeps the
+# callbacks valid across the re-enumeration delay below.
 
 import time
 import machine
@@ -25,6 +33,7 @@ _interface_open = False
 
 
 def _open_interface(descriptor):
+    """Host SET_INTERFACE callback. Track when the vendor interface is opened."""
     global _interface_open
     raw = bytes(descriptor)
 
@@ -39,6 +48,7 @@ def _open_interface(descriptor):
 
 
 def _usb_reset():
+    """USB bus reset callback. Forget interface state and notify the server."""
     global _interface_open
     _interface_open = False
     if _server is not None:
@@ -46,11 +56,13 @@ def _usb_reset():
 
 
 def _transfer_complete(endpoint, result, transferred):
+    """Transfer completion callback shared by both bulk endpoints."""
     if _server is not None:
         _server.on_transfer_complete(endpoint, result, transferred)
 
 
 def _configure_usb():
+    """Build the composite configuration and activate the USB device."""
     builtin = USB.BUILTIN_CDC
 
     USBD.active(False)

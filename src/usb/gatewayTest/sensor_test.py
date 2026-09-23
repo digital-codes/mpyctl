@@ -1,6 +1,14 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 # sensor_test.py
 #
+# Test-sensor factory for the USB gateway. This is the MicroPython
+# counterpart of the Linux host application sensor_tui.py.
+#
+# Creates the three demo channels expected by the TUI:
+#   channel 1 : button  (GPIO41 input,  timer driven)
+#   channel 2 : rgb     (GPIO35 NeoPixel output)
+#   channel 3 : espnow  (ESP-NOW ingress; also the Wi-Fi channel number)
+#
 # From the REPL:
 #   import sensor_test
 #   sensor_test.run()
@@ -17,6 +25,12 @@ espnow = None
 
 
 def run(items = ("button", "rgb", "espnow")):
+    """Create and start the requested test sensors.
+
+    Returns without doing anything if any test sensor is already active.
+    Button polling is started automatically; on failure all created
+    sensors are closed again before re-raising.
+    """
     global button, rgb, espnow
 
     enabled = set()
@@ -60,6 +74,7 @@ def run(items = ("button", "rgb", "espnow")):
 
 
 def stop(items = ("button", "rgb", "espnow")):
+    """Close the selected test sensors. Collects errors and raises at the end."""
     global button, rgb, espnow
 
     errors = []
@@ -90,6 +105,7 @@ def stop(items = ("button", "rgb", "espnow")):
 
 
 def stats():
+    """Combined gateway, ESP-NOW and sensor activity report."""
     import usb_channel_server
 
     return {

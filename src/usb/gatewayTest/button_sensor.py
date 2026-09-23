@@ -1,5 +1,14 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 # button_sensor.py
+#
+# Debounced digital input (push button) sensor.
+#
+# Publishes button state changes on a DIR_IN gateway channel (KIND 1).
+# Payload is a single byte: 0x01 pressed, 0x00 released.
+#
+# The pin is sampled periodically from a hardware timer; a level change
+# is only emitted after it has been stable for debounce_ms. The emission
+# itself runs outside the timer IRQ via micropython.schedule().
 
 import time
 import machine
@@ -8,6 +17,13 @@ import usb_channel_server as ucs
 
 
 class DigitalInputSensor:
+    """Debounced GPIO input published on a USB gateway channel.
+
+    Registers a DIR_IN channel on construction. Call start() to begin
+    polling and emitting events, stop() to pause, close() to tear down
+    and unregister the channel.
+    """
+
     KIND = 1
 
     def __init__(
@@ -45,6 +61,7 @@ class DigitalInputSensor:
         )
 
     def start(self):
+        """Start periodic polling and emit the current state once."""
         if self.running:
             return
         self.timer.init(
@@ -56,16 +73,19 @@ class DigitalInputSensor:
         self._emit()
 
     def stop(self):
+        """Stop polling. The channel stays registered; call close() to remove it."""
         if not self.running:
             return
         self.timer.deinit()
         self.running = False
 
     def close(self):
+        """Stop polling and unregister the channel."""
         self.stop()
         self.gateway.unregister_channel(self.channel_id)
 
     def _poll(self, timer):
+        """Timer IRQ. Track raw edges; schedule an emit once the level is stable."""
         now = time.ticks_ms()
         raw = self.pin.value()
 
@@ -85,9 +105,11 @@ class DigitalInputSensor:
                 pass
 
     def _scheduled_emit(self, ignored):
+        """Deferred emit target run outside the timer IRQ by the scheduler."""
         self._emit()
 
     def _emit(self):
+        """Send the debounced state as a one-byte event. Queue-full is not fatal."""
         pressed = (
             self.stable == 0
             if self.active_low

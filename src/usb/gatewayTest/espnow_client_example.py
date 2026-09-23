@@ -1,5 +1,21 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 # espnow_client_example.py
+#
+# ESP-NOW test client. Runs on a SECOND ESP32 board (not the gateway).
+#
+# Sends a short test message to the server every 5 seconds:
+#   on-air payload = 16-byte shared key header + "sensor message <n>"
+#
+# Configuration:
+#   private.py   : ENOW_SERVER (server MAC hex), ENOW_KEY (hex, its first
+#                  16 bytes become the PMK and the message header),
+#                  ENOW_CHANNEL (Wi-Fi channel to join)
+#   config.json  : ble.key (hex) used as the LMK for encrypted unicast to
+#                  the registered server peer. Without it traffic is sent
+#                  unencrypted.
+#
+# The server must have this board registered via enableNode()/peers.json
+# with the same LMK.
 
 import time
 import json

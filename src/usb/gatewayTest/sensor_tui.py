@@ -1,6 +1,22 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 #!/usr/bin/env python3
-"""Fedora terminal UI for the AtomS3U USB sensor gateway."""
+"""Fedora terminal UI for the AtomS3U USB sensor gateway.
+
+Host counterpart of the MicroPython application sensor_test.py. Talks to
+the device's vendor-specific bulk interface (interface 2, EP 0x03 OUT /
+EP 0x83 IN) using the 4-byte framing defined by usb_channel_server.py:
+channel:u8, msg_type:u8, length:u16 le, payload.
+
+A background reader thread parses frames into an event queue; the curses
+main loop drains it and redraws. Fixed channel map expected from the
+device: 0 control, 1 button, 2 rgb, 3 espnow.
+
+Keys: r/g/b/w/y set the LED colour, 0 turns it off, p ping, c channel
+list, d toggle device debug, s request gateway status, x clear the
+device debug log, q (or ESC) quit.
+
+Requires pyusb. Optional --serial selects among several attached boards.
+"""
 
 from __future__ import annotations
 
@@ -62,6 +78,8 @@ class USBDisconnected(Exception):
 
 
 class FrameParser:
+    """Incremental parser for the 4-byte framed protocol. Invalid headers abort the buffer."""
+
     def __init__(self, max_payload=4096):
         self.buffer = bytearray()
         self.max_payload = max_payload
@@ -94,6 +112,13 @@ class FrameParser:
 
 
 class USBGateway:
+    """PyUSB transport. Reader thread delivers (kind, data) tuples on .events.
+
+    kind is "frame" with (channel, msg_type, payload) or "error" with a
+    text description. The event queue drops its oldest entry when full so
+    the device is never blocked by a slow consumer.
+    """
+
     def __init__(self, serial=None, timeout_ms=100):
         self.serial = serial
         self.timeout_ms = timeout_ms
@@ -127,6 +152,7 @@ class USBGateway:
         return None
 
     def open(self):
+        """Locate the device, claim the vendor interface and start the reader thread."""
         dev = self._find()
         if dev is None:
             raise USBDisconnected("device not found")
@@ -151,6 +177,7 @@ class USBGateway:
         self.reader_thread.start()
 
     def close(self):
+        """Stop the reader, release the interface and dispose USB resources."""
         self.stop_event.set()
 
         if self.reader_thread is not None:
@@ -169,6 +196,7 @@ class USBGateway:
                 usb.util.dispose_resources(dev)
 
     def send(self, channel, msg_type, payload=b""):
+        """Send one frame. Raises USBDisconnected on device loss or short write."""
         if self.dev is None:
             raise USBDisconnected("device is not open")
 
@@ -209,6 +237,7 @@ class USBGateway:
             self.events.put_nowait(event)
 
     def _reader(self):
+        """Reader thread: read bursts from EP_IN, parse and enqueue frames."""
         self.reader_alive = True
         try:
             while not self.stop_event.is_set():
@@ -246,6 +275,7 @@ class USBGateway:
 
 
 def parse_channels(payload):
+    """Decode a channel-list payload into {channel_id: ChannelInfo}."""
     if not payload:
         raise ProtocolError("empty channel list")
 
@@ -285,6 +315,7 @@ def parse_channels(payload):
 
 
 def parse_status(payload):
+    """Decode the fixed 28-byte gateway status payload into a dict."""
     if len(payload) != 28:
         raise ProtocolError(
             "unexpected status length %d" % len(payload)
@@ -309,6 +340,8 @@ def parse_status(payload):
 
 
 class TUI:
+    """Curses front end: tracks gateway/sensor state and renders it."""
+
     COLORS = {
         ord("0"): (0, 0, 0),
         ord("r"): (255, 0, 0),
@@ -331,12 +364,14 @@ class TUI:
         self.debug_requested = False
 
     def send_control(self, command, argument=None):
+        """Send a CTRL_* command on the control channel."""
         payload = bytes((command,))
         if argument is not None:
             payload += bytes((argument,))
         self.gateway.send(CHANNEL_CONTROL, MSG_COMMAND, payload)
 
     def request_initial_state(self):
+        """Ping, fetch the channel list and the gateway status."""
         self.gateway.send(CHANNEL_CONTROL, MSG_PING)
         self.gateway.send(
             CHANNEL_CONTROL,
@@ -345,6 +380,7 @@ class TUI:
         self.send_control(CTRL_GET_STATUS)
 
     def handle_frame(self, channel, msg_type, payload):
+        """Update TUI state from one device frame."""
         if channel == CHANNEL_CONTROL:
             if msg_type == MSG_PONG:
                 self.status = "controller online"
@@ -400,6 +436,7 @@ class TUI:
                 self.esp_messages = self.esp_messages[-8:]
 
     def drain_events(self):
+        """Apply all pending reader-thread events to the TUI state."""
         while True:
             try:
                 kind, data = self.gateway.events.get_nowait()
@@ -412,6 +449,7 @@ class TUI:
                 self.last_error = data
 
     def draw(self, screen):
+        """Redraw the whole (single-page) status screen."""
         screen.erase()
         rows, columns = screen.getmaxyx()
 
@@ -497,6 +535,7 @@ class TUI:
         screen.refresh()
 
     def run(self, screen):
+        """Curses main loop: drain events, redraw, dispatch key presses."""
         curses.curs_set(0)
         screen.nodelay(True)
         screen.timeout(100)
@@ -541,6 +580,7 @@ class TUI:
 
 
 def main():
+    """Entry point: open the gateway and run the TUI until quit or signal."""
     parser = argparse.ArgumentParser()
     parser.add_argument("--serial")
     args = parser.parse_args()

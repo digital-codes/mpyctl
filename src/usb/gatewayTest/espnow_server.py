@@ -1,5 +1,28 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 # espnow_server.py
+#
+# ESP-NOW ingress sensor: receive ESP-NOW packets and forward them as
+# events on a USB gateway channel (KIND 3, DIR_IN).
+#
+# Configuration lives in /config.json on the device:
+#   {
+#     "id":  "<device id>",
+#     "ble":  {"key": "<32 hex chars = 16-byte shared key>"},
+#     "wlan": {"addr": "<own mac hex>"},
+#     ...
+#   }
+#
+# Message contract with espnow_client_example.py:
+#   on-air payload  = 16-byte shared key + application data
+#   USB event payload = 6-byte source MAC + 1-byte RSSI (offset by 256)
+#                       + application data
+#
+# Wi-Fi STA is activated before ESP-NOW is created (required on ESP32).
+# The gateway channel id doubles as the Wi-Fi channel number.
+#
+# Stand-alone mode (run as __main__): no USB gateway, channel id taken
+# from private.py ENOW_CHANNEL and peers loaded from peers.json
+# (list of {"mac": "<hex>", "lmk": "<hex>"}). Requires private.py.
 
 import os
 import json
@@ -18,6 +41,13 @@ if not _CONF_FILE in files:
 
 
 class ESPNowIngressSensor:
+    """ESP-NOW receiver bridging peer messages onto a USB gateway channel.
+
+    In gateway mode the sensor registers CHANNEL (KIND 3, DIR_IN) and
+    forwards every authenticated message as one MSG_EVENT. In stand-alone
+    mode (gateway=None) messages are only counted and optionally printed.
+    """
+
     KIND = 3
 
     def __init__(
@@ -106,9 +136,11 @@ class ESPNowIngressSensor:
         self.radio.irq(self._irq)
 
     def setDebug(self, debug):
+        """Toggle verbose print output for received/rejected traffic."""
         self.debug = debug
 
     def setSecurity(self, security):
+        """If security is True, only registered peers are accepted."""
         self.security = security
 
     def enableNode(self, mac, lmk=None):
@@ -124,10 +156,12 @@ class ESPNowIngressSensor:
 
 
     def disableNode(self, mac):
+        """Remove a previously enabled peer. Encrypted traffic from it is dropped."""
         self.radio.del_peer(mac)
         
 
     def close(self):
+        """Detach the IRQ, deactivate the radio and unregister the channel."""
         try:
             self.radio.irq(None)
         except Exception:
@@ -137,6 +171,7 @@ class ESPNowIngressSensor:
             self.gateway.unregister_channel(self.channel_id)
 
     def _irq(self, radio):
+        """ESP-NOW IRQ. Schedule a drain; never block in interrupt context."""
         if self.irq_pending:
             return
 
@@ -147,6 +182,11 @@ class ESPNowIngressSensor:
             self.irq_pending = False
 
     def _drain(self, ignored):
+        """Drain the ESP-NOW receive buffer and forward valid messages.
+
+        A message is accepted only from a registered peer (when security
+        is on) and only if it starts with the 16-byte shared key header.
+        """
         self.irq_pending = False
 
         while True:
@@ -195,6 +235,7 @@ class ESPNowIngressSensor:
                     print("Received message from", mac, "RSSI:", rssi, "Data:", application_data)
 
     def stats(self):
+        """Configuration plus receive/reject/drop counters and radio stats."""
         return {
             "config": {
                 "address": self.address,

@@ -1,6 +1,23 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 # usb_channel_server.py
 # Generic USB framed channel server. No sensor imports.
+#
+# Wire format (little-endian):
+#   channel   u8    0 = control, 1..254 application, 255 invalid
+#   msg type  u8    MSG_* (see below)
+#   length    u16   payload length in bytes
+#   payload   bytes <= max_payload
+#
+# Channels are registered dynamically with a kind, direction (host view),
+# maximum packet size, name and an optional inbound handler.
+#
+# The control channel (0) answers PING with PONG ("AS3U" + version byte),
+# serves channel list requests, and handles CTRL_* commands wrapped in
+# MSG_COMMAND (debug switch, status readout, debug log clear).
+#
+# TX path note: submit_xfer() may complete synchronously on current
+# ESP32-S3 MicroPython builds, so an IN transfer is marked busy BEFORE it
+# is submitted. See the README "Important implementation detail" section.
 
 import time
 
@@ -45,11 +62,13 @@ class USBQueueFull(USBGatewayError):
 
 
 def set_default_gateway(gateway):
+    """Publish the gateway singleton used by sensor modules via get_gateway()."""
     global _default_gateway
     _default_gateway = gateway
 
 
 def get_gateway():
+    """Return the process-wide gateway. Raises if boot.py has not run."""
     if _default_gateway is None:
         raise RuntimeError("USB gateway is not initialized")
     return _default_gateway
@@ -69,6 +88,13 @@ def _u32(value):
 
 
 class USBChannelServer:
+    """Framed multi-channel transport over one bulk endpoint pair.
+
+    Owns RX framing/dispatch and a single-flight TX queue, tracks USB
+    interface state through the callbacks installed by boot.py, and
+    offers a runtime debug log. Channel 0 (control) is always present.
+    """
+
     def __init__(
         self,
         usbd,
@@ -139,15 +165,18 @@ class USBChannelServer:
             del self.debug_log[0]
 
     def set_debug(self, enabled):
+        """Enable/disable the debug ring buffer. Disabling clears it."""
         self.debug_enabled = bool(enabled)
         if not self.debug_enabled:
             self.debug_log = []
 
     def dump_debug(self):
+        """Print the debug log to the REPL."""
         for entry in self.debug_log:
             print(entry)
 
     def clear_debug(self):
+        """Empty the debug log."""
         self.debug_log = []
 
     def register_channel(
@@ -160,6 +189,12 @@ class USBChannelServer:
         handler=None,
         announce=True,
     ):
+        """Register a channel and announce it to the host if the interface is open.
+
+        handler(msg_type, payload) receives inbound frames; with
+        handler=None the channel is read-only for the host (an error
+        frame is returned instead).
+        """
         if not 0 <= channel_id <= 254:
             raise ValueError("channel id must be 0..254")
         if channel_id in self.channels:
@@ -192,6 +227,7 @@ class USBChannelServer:
             )
 
     def unregister_channel(self, channel_id):
+        """Remove an application channel and notify the host. Channel 0 is fixed."""
         if channel_id == CHANNEL_CONTROL:
             raise ValueError("control channel cannot be removed")
         if channel_id not in self.channels:
@@ -209,12 +245,14 @@ class USBChannelServer:
             )
 
     def on_interface_open(self):
+        """Notify that the host opened the vendor interface. Arms RX and starts TX."""
         self.interface_open = True
         self._debug("interface_open")
         self._arm_out()
         self._start_next_in()
 
     def on_usb_reset(self):
+        """Notify a bus reset. Drops all transfer state; queued frames survive."""
         self.resets += 1
         self.interface_open = False
         self.out_armed = False
@@ -307,6 +345,7 @@ class USBChannelServer:
             self._debug("submit_in_rejected")
 
     def on_transfer_complete(self, endpoint, result, transferred):
+        """Transfer completion callback for both bulk endpoints."""
         self._debug(
             "xfer_complete",
             endpoint=endpoint,
@@ -428,6 +467,12 @@ class USBChannelServer:
         payload=b"",
         raise_on_full=True,
     ):
+        """Queue one frame for transmission.
+
+        Returns True when queued, False when the TX queue is full and
+        raise_on_full is False (event-style traffic). Raises USBQueueFull
+        when the queue is full and raise_on_full is True.
+        """
         if channel_id not in self.channels:
             raise KeyError(channel_id)
         if not isinstance(payload, (bytes, bytearray, memoryview)):
@@ -460,6 +505,7 @@ class USBChannelServer:
         return True
 
     def send_error(self, related_channel, code, text):
+        """Report a protocol/handler problem on the control channel (never raises)."""
         raw = text.encode("utf-8")[:120]
         self.send(
             CHANNEL_CONTROL,
@@ -553,6 +599,7 @@ class USBChannelServer:
         return bytes(result)
 
     def stats(self):
+        """Snapshot of all transport counters and transfer state."""
         return {
             "interface_open": self.interface_open,
             "channels": len(self.channels),

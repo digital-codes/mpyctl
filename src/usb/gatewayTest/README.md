@@ -33,21 +33,51 @@ The Linux TUI successfully receives button events and controls the RGB LED.
 
 Current implementation:
 
-- Wi-Fi STA is activated before ESP-NOW.
-- Configuration for both server and client is stored in `/private.py`.
+- Wi-Fi STA is activated before ESP-NOW (required on ESP32).
+- In gateway mode the ingress sensor registers channel 3; the channel id
+  doubles as the Wi-Fi channel number.
+- On-air message: 16-byte shared key header + application data.
+- USB event payload: 6-byte source MAC + 1-byte RSSI (offset by 256) +
+  application data.
 
-private.py:
+Testing status (2026-09-23):
+
+- **Client to server is verified, with encryption, when the LMK is set.**
+  `espnow_client_example.py` runs on a second ESP32 board.
+- Server to client is still to be verified.
+
+#### Configuration
+
+The ESP-NOW server (gateway mode and stand-alone) reads `/config.json`:
+
+```json
+{
+  "id":  "<device id>",
+  "ble":  {"key": "<32 hex chars: 16-byte shared key / LMK>"},
+  "wlan": {"addr": "<own MAC hex>"}
+}
+```
+
+`espnow_client_example.py` (and the stand-alone entry point in
+`espnow_server.py`) use `private.py`:
 
 >   ENOW_SERVER = \<hex mac address (no : )\>
-    ENOW_KEY = \<16 byte hex key\>
-    ENOW_CHANNEL = \<channel\>
+    ENOW_KEY = \<hex key; first 16 bytes are the PMK and the message header\>
+    ENOW_CHANNEL = \<Wi-Fi channel\>
 
+and `config.json` `ble.key` as the LMK for encrypted unicast.
+Encryption only works when every peer is registered with the same LMK:
+the server via `enableNode(mac, lmk)` or `peers.json`, the client via
+`radio.add_peer(SERVER_MAC, LMK, ...)`.
+The stand-alone server loads `peers.json`, a list of
+`{"mac": "<hex>", "lmk": "<hex>"}` entries.
 
+To run the client test: copy `espnow_client_example.py`, `private.py`
+and `config.json` to a second ESP32 and start it as a script (it runs
+its send loop at import time). It transmits `sensor message <n>` to the
+server every 5 seconds; the messages show up on TUI channel 3.
 
-ESP-NOW initialization succeeds. Client send to server verified. Reverse communication is still to be verified.
-
-
-#### "Known Issues / Lessons Learned" 
+#### Known Issues / Lessons Learned 
 The synchronous callback behavior of submit_xfer() on this MicroPython build is unusual enough 
 that it's worth documenting prominently for future maintenance. 
 
@@ -66,15 +96,19 @@ usb_channel_server.py
     control channel
     debug support
 
-button_sensor.py
-
-rgb_sensor.py
-
-espnow_server.py
-private.py  
+button_sensor.py        channel 1, GPIO41 input
+rgb_sensor.py           channel 2, GPIO35 NeoPixel output
+espnow_server.py        channel 3, ESP-NOW ingress
+config.json             shared key / LMK, device id, own MAC
+private.py, peers.json  stand-alone ESP-NOW testing only
 
 sensor_test.py
     creates the test sensors
+
+Host-side (not installed on the board):
+
+sensor_tui.py               Linux curses UI (pyusb)
+espnow_client_example.py    ESP-NOW test client for a second ESP32
 ```
 
 Sensor modules never import `boot.py`.
@@ -100,7 +134,9 @@ Copy:
 - espnow_server.py
 - sensor_test.py
 
-to the board.
+to the board. Add `config.json` (see the ESP-NOW configuration section)
+if the ESP-NOW sensor is used; `espnow_server.py` refuses to start
+without it.
 
 Power-cycle afterwards.
 
@@ -208,7 +244,7 @@ sensor events.
 
 # Next steps
 
-- Verify ESP-NOW client communication.
+- Verify ESP-NOW server to client communication.
 - Add sensor base class.
 - Add I²C sensor channels.
 - Add SPI sensor channels.
