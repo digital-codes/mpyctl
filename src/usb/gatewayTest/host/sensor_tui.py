@@ -614,11 +614,15 @@ class TUI:
         # Show input field when in input mode
         row += 1
         if self.input_mode:
-            line(row, "Send to peer [0-%d]: " % (len(self.peers) - 1 if self.peers else 0))
+            if self.peers and 0 <= self.input_peer < len(self.peers):
+                selected_mac = self.peers[self.input_peer].get("mac", "unknown")
+                line(row, "Peer %d: %s" % (self.input_peer, selected_mac))
+            else:
+                line(row, "Send to peer [0-%d]: " % (len(self.peers) - 1 if self.peers else 0))
             row += 1
             prompt = "Message: "
             line(row, prompt + self.input_text)
-            line(row + 1, "Press Enter to send, Esc to cancel")
+            line(row + 1, "Press Enter to send, Esc to cancel, Up/Down to change peer")
         else:
             line(row, "Press m to send ESP-NOW message")
 
