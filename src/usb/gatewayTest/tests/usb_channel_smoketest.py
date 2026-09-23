@@ -464,7 +464,7 @@ def run_scenario(sync_in):
 
     # --- odd USB channel id must not move the radio -------------------
     with redirect_stdout(io.StringIO()):
-        e2 = espnow_server.ESPNowIngressSensor(channel_id=7)
+        e2 = espnow_server.ESPNowRadio(channel_id=7)
     try:
         assert e2.wifi_channel == WIFI_CHANNEL, e2.wifi_channel
         assert 7 in h.server.channels and 3 in h.server.channels

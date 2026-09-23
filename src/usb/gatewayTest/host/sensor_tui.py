@@ -559,14 +559,9 @@ class TUI:
             row += 1
             line(row, "Enter=send, Esc=cancel, Up/Down=peer")
         else:
-            line(row, "Keys: r/g/b/w/y/0=RGB, p=ping, c=ch, m=msg, q=quit")
+            line(row, "Keys: r/g/b/w/y/0=RGB, p/c/d/s/x/m/q")
 
         footer = max(row + 2, rows - 2)
-        line(
-            footer,
-            "Keys: r/g/b/w/y LED, 0 off, p ping, c channels, "
-            "d debug, s status, x clear log, m msg, q quit",
-        )
         if self.last_error:
             line(footer + 1, "Error: " + self.last_error)
 
