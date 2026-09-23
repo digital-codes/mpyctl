@@ -65,6 +65,11 @@ All ESP-NOW code (server and client) uses `private.py`:
     ENOW_KEY = \<hex key; first 16 bytes are the PMK and the message header\> (client only)
     ENOW_CHANNEL = \<Wi-Fi channel\> (all modes)
 
+**Note:** `private.py` is kept in `stick/` together with the board code,
+but the **client needs the same file** — copy it to the second ESP32
+along with `client/espnow_client_example.py`. It is not in git
+(gitignored) and must be created per deployment.
+
 `espnow_client_example.py` additionally uses `config.json` `ble.key` as
 the LMK for encrypted unicast.
 Encryption only works when every peer is registered with the same LMK:
@@ -73,10 +78,11 @@ the server via `enableNode(mac, lmk)` or `peers.json`, the client via
 The stand-alone server loads `peers.json`, a list of
 `{"mac": "<hex>", "lmk": "<hex>"}` entries.
 
-To run the client test: copy `espnow_client_example.py`, `private.py`
-and `config.json` to a second ESP32 and start it as a script (it runs
-its send loop at import time). It transmits `sensor message <n>` to the
-server every 5 seconds; the messages show up on TUI channel 3.
+To run the client test: copy `client/espnow_client_example.py`,
+`stick/private.py` and `config.json` to a second ESP32 and start it as a
+script (it runs its send loop at import time). It transmits
+`sensor message <n>` to the server every 5 seconds; the messages show up
+on TUI channel 3.
 
 #### Known Issues / Lessons Learned 
 The synchronous callback behavior of submit_xfer() on this MicroPython build is unusual enough 
@@ -87,30 +93,30 @@ that it's worth documenting prominently for future maintenance.
 # Software structure
 
 ```
-boot.py
-    USB enumeration only
+stick/                  AtomS3U MicroPython, installed on the board
+    boot.py                 USB enumeration only
+    usb_channel_server.py   USB transport, framing, channel management,
+                            control channel, debug support
+    button_sensor.py        channel 1, GPIO41 input
+    rgb_sensor.py           channel 2, GPIO35 NeoPixel output
+    espnow_server.py        channel 3, ESP-NOW ingress
+    sensor_test.py          creates the test sensors
+    manualTest.py           REPL scratch script for manual bring-up
+                            (deletes boot.py from the device at the end!)
+    config.json             shared key / LMK, device id, own MAC
+    private.py              Wi-Fi channel (ENOW_CHANNEL), secrets;
+                            also needed by client/ (see above)
+    peers.json              stand-alone ESP-NOW testing only
 
-usb_channel_server.py
-    USB transport
-    framing
-    channel management
-    control channel
-    debug support
+host/                   Linux host application
+    sensor_tui.py           curses UI (pyusb)
 
-button_sensor.py        channel 1, GPIO41 input
-rgb_sensor.py           channel 2, GPIO35 NeoPixel output
-espnow_server.py        channel 3, ESP-NOW ingress
-config.json             shared key / LMK, device id, own MAC
-private.py              Wi-Fi channel (ENOW_CHANNEL), client/stand-alone keys
-peers.json              stand-alone ESP-NOW testing only
+client/                 ESP-NOW test client for a second ESP32
+    espnow_client_example.py
 
-sensor_test.py
-    creates the test sensors
-
-Host-side (not installed on the board):
-
-sensor_tui.py               Linux curses UI (pyusb)
-espnow_client_example.py    ESP-NOW test client for a second ESP32
+tests/                  host-side smoke test (stubs the MicroPython
+                        modules; run: python3 tests/usb_channel_smoketest.py)
+    usb_channel_smoketest.py
 ```
 
 Sensor modules never import `boot.py`.
@@ -127,7 +133,7 @@ gateway = usb_channel_server.get_gateway()
 
 # Device installation
 
-Copy:
+Copy the contents of `stick/`:
 
 - boot.py
 - usb_channel_server.py
@@ -173,6 +179,12 @@ sensor_test.stop()
 
 # Linux TUI
 
+Run `host/sensor_tui.py` (needs pyusb, curses):
+
+```
+python3 host/sensor_tui.py [--serial <serial>]
+```
+
 Current keys:
 
 - p : Ping
@@ -199,10 +211,26 @@ sensor_test.run()
 
 exit repl with Ctrl-X  (not Ctrl-D) => test keeps running
 
-start sensor_tui
+start `host/sensor_tui.py`
 
 
 
+
+# Host smoke test
+
+`tests/usb_channel_smoketest.py` runs the real `stick/` transport and
+sensors plus `host/sensor_tui.py` parsing against a stubbed USB device
+(no hardware needed):
+
+```
+python3 tests/usb_channel_smoketest.py
+```
+
+It covers framing, ping, channel discovery, status, the RGB round trip,
+button events and the ESP-NOW receive path, and verifies identical
+frames with synchronous and asynchronous USB IN completion.
+
+---
 
 # Debugging
 
