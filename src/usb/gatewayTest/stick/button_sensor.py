@@ -14,7 +14,7 @@ import time
 import machine
 import micropython
 import usb_channel_server as ucs
-from common.channel_defs import KIND_INPUT, DIR_IN, MSG_EVENT
+from channel_defs import KIND_INPUT, DIR_IN, MSG_EVENT
 
 
 class DigitalInputSensor:
