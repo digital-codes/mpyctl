@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 # espnow_server.py
 #
-# ESP-NOW ingress sensor: receive ESP-NOW packets and forward them as
+# ESP-NOW radio sensor: receive ESP-NOW packets and forward them as
 # events on a USB gateway channel (KIND 3, DIR_IN).
 #
 # Configuration lives in /config.json on the device:

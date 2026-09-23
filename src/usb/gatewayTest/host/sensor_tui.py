@@ -412,6 +412,24 @@ class TUI:
             except Exception as e:
                 print(f"Failed to send peer_add for {peer.get('mac')}: {e}")
 
+    def _save_and_clear_log(self):
+        """Save ESP-NOW messages and status to sensor_test.log and clear them."""
+        try:
+            with open("sensor_test.log", "a") as f:
+                f.write(f"=== {time.strftime('%Y-%m-%d %H:%M:%S')} ===\n")
+                if self.gateway_status:
+                    f.write(f"Status: RX={self.gateway_status['rx_frames']} TX={self.gateway_status['tx_frames']} "
+                            f"parse={self.gateway_status['parse_errors']} usb={self.gateway_status['usb_errors']}\n")
+                if self.esp_messages:
+                    f.write("ESP-NOW messages:\n")
+                    for msg in self.esp_messages:
+                        f.write(f"  {msg}\n")
+                f.write("\n")
+        except Exception as e:
+            self.last_error = f"Failed to save log: {e}"
+        self.esp_messages = []
+        self.send_control(CTRL_CLEAR_DEBUG)
+
     def send_control(self, command, argument=None):
         """Send a CTRL_* command on the control channel."""
         payload = bytes((command,))
@@ -647,8 +665,8 @@ class TUI:
                     self.send_control(CTRL_GET_STATUS)
                     self.last_action = "status requested"
                 elif key == ord("x"):
-                    self.send_control(CTRL_CLEAR_DEBUG)
-                    self.last_action = "log cleared"
+                    self._save_and_clear_log()
+                    self.last_action = "log saved"
             except Exception as exc:
                 self.last_error = str(exc)
 

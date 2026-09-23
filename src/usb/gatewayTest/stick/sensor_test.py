@@ -7,7 +7,7 @@
 # Creates the three demo channels expected by the TUI:
 #   channel 1 : button  (GPIO41 input,  timer driven)
 #   channel 2 : rgb     (GPIO35 NeoPixel output)
-#   channel 3 : espnow  (ESP-NOW ingress; Wi-Fi channel from private.py)
+#   channel 3 : espnow  (ESP-NOW radio; Wi-Fi channel from private.py)
 #
 # From the REPL:
 #   import sensor_test
