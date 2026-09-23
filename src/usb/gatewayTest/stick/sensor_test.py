@@ -19,6 +19,9 @@ from button_sensor import DigitalInputSensor
 from rgb_sensor import RGBOutputSensor
 from espnow_server import ESPNowIngressSensor
 
+# need to set peers like in espnow_server.py if you want to run the ESP-NOW sensor standalone
+import json
+
 button = None
 rgb = None
 espnow = None
@@ -47,6 +50,15 @@ def run(items = ("button", "rgb", "espnow")):
         if "espnow" in items and espnow is None:
             espnow = ESPNowIngressSensor(3)
             created.append(espnow)
+            # add peer with LMK from private.py
+            with open("peers.json", "r") as f:
+                peers = json.load(f)
+                for peer in peers:
+                    mac = peer["mac"]
+                    lmk = peer["lmk"]
+                    print("Enabling peer:", mac, "LMK:", lmk)
+                    espnow.enableNode(bytes.fromhex(mac), bytes.fromhex(lmk))
+            
 
         if button is not None:
             button.start()
