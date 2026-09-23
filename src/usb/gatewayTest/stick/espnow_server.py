@@ -360,7 +360,7 @@ class ESPNowRadio:
             "received": self.received,
             "rejected": self.rejected,
             "forward_dropped": self.forward_dropped,
-            "espnow": self.radio.stats(),
+            "radio": self.radio.stats(),
         }
 
 

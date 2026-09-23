@@ -7,7 +7,7 @@
 # Creates the three demo channels expected by the TUI:
 #   channel 1 : button  (GPIO41 input,  timer driven)
 #   channel 2 : rgb     (GPIO35 NeoPixel output)
-#   channel 3 : espnow  (ESP-NOW radio; Wi-Fi channel from private.py)
+#   channel 3 : radio  (ESP-NOW radio; Wi-Fi channel from private.py)
 #
 # From the REPL:
 #   import sensor_test
@@ -21,10 +21,10 @@ from espnow_server import ESPNowRadio
 
 button = None
 rgb = None
-espnow = None
+radio = None
 
 
-def run(items = ("button", "rgb", "espnow")):
+def run(items = ("button", "rgb", "radio")):
     """Create and start the requested test sensors.
 
     Sensors that are already active are left untouched; only the missing
@@ -32,7 +32,7 @@ def run(items = ("button", "rgb", "espnow")):
     Button polling is started automatically; on failure all sensors
     created in this call are closed again before re-raising.
     """
-    global button, rgb, espnow
+    global button, rgb, radio
 
     created = []
 
@@ -44,9 +44,9 @@ def run(items = ("button", "rgb", "espnow")):
             rgb = RGBOutputSensor(2, 35)
             created.append(rgb)
 
-        if "espnow" in items and espnow is None:
-            espnow = ESPNowRadio(3)
-            created.append(espnow)
+        if "radio" in items and radio is None:
+            radio = ESPNowRadio(3)
+            created.append(radio)
 
         if button is not None:
             button.start()
@@ -59,13 +59,13 @@ def run(items = ("button", "rgb", "espnow")):
                 pass
         button = None
         rgb = None
-        espnow = None
+        radio = None
         raise
 
 
-def stop(items = ("button", "rgb", "espnow")):
+def stop(items = ("button", "rgb", "radio")):
     """Close the selected test sensors. Collects errors and raises at the end."""
-    global button, rgb, espnow
+    global button, rgb, radio
 
     errors = []
 
@@ -82,10 +82,10 @@ def stop(items = ("button", "rgb", "espnow")):
                 rgb = None
             except Exception as exc:
                 errors.append(exc)
-        elif item == "espnow" and espnow is not None:
+        elif item == "radio" and radio is not None:
             try:
-                espnow.close()
-                espnow = None
+                radio.close()
+                radio = None
             except Exception as exc:
                 errors.append(exc)
 
@@ -100,7 +100,7 @@ def stats():
 
     return {
         "usb": usb_channel_server.get_gateway().stats(),
-        "espnow": None if espnow is None else espnow.stats(),
+        "radio": None if radio is None else radio.stats(),
         "button_active": button is not None,
         "rgb_active": rgb is not None,
     }
