@@ -18,17 +18,19 @@
 #                       + application data
 #
 # Wi-Fi STA is activated before ESP-NOW is created (required on ESP32).
-# The gateway channel id doubles as the Wi-Fi channel number.
+# channel_id is only the USB gateway channel number; the Wi-Fi channel
+# is always taken from private.py ENOW_CHANNEL (private.py is required):
+#   ENOW_CHANNEL = <Wi-Fi channel>
 #
-# Stand-alone mode (run as __main__): no USB gateway, channel id taken
-# from private.py ENOW_CHANNEL and peers loaded from peers.json
-# (list of {"mac": "<hex>", "lmk": "<hex>"}). Requires private.py.
+# Stand-alone mode (run as __main__): no USB gateway, peers loaded from
+# peers.json (list of {"mac": "<hex>", "lmk": "<hex>"}).
 
 import os
 import json
 import micropython
 import network
 import espnow
+import private as pr
 import usb_channel_server as ucs
 import time
     
@@ -43,9 +45,11 @@ if not _CONF_FILE in files:
 class ESPNowIngressSensor:
     """ESP-NOW receiver bridging peer messages onto a USB gateway channel.
 
-    In gateway mode the sensor registers CHANNEL (KIND 3, DIR_IN) and
-    forwards every authenticated message as one MSG_EVENT. In stand-alone
-    mode (gateway=None) messages are only counted and optionally printed.
+    channel_id is the USB gateway channel number only (KIND 3, DIR_IN);
+    the radio operates on private.py ENOW_CHANNEL regardless of it.
+    In gateway mode every authenticated message is forwarded as one
+    MSG_EVENT. In stand-alone mode (gateway=None) messages are only
+    counted and optionally printed.
     """
 
     KIND = 3
@@ -98,10 +102,10 @@ class ESPNowIngressSensor:
             raise BaseException("No Config")
 
         self.shared_key = bytes.fromhex(config["ble"]["key"])
-        self.wifi_channel = channel_id
+        self.wifi_channel = pr.ENOW_CHANNEL
         self.address = config["wlan"]["addr"]
-        
-        print("Device ID:", config["id"], "Wi-Fi channel:", ", address: ", self.address, self.wifi_channel, "Shared key:", self.shared_key)
+
+        print("Device ID:", config["id"], "Wi-Fi channel:", self.wifi_channel, "address:", self.address, "Shared key:", self.shared_key)
 
         try:
             self.wlan.config(pm=self.wlan.PM_NONE)
@@ -200,7 +204,7 @@ class ESPNowIngressSensor:
                 except Exception:
                     if self.debug:
                         print("Rejected message from unknown peer:", mac)
-                    return
+                    continue
 
             if self.debug:
                 print("Received message from", mac, "Data:", message)
@@ -250,11 +254,9 @@ class ESPNowIngressSensor:
 
 
 if __name__ == "__main__":
-    # get channel
-    import private as pr
-    WIFI_CHANNEL = pr.ENOW_CHANNEL
-
-    sensor = ESPNowIngressSensor(channel_id=WIFI_CHANNEL,debug=True, stand_alone=True)
+    # channel_id is the USB channel number and unused without a gateway;
+    # the Wi-Fi channel comes from private.py ENOW_CHANNEL (see above).
+    sensor = ESPNowIngressSensor(channel_id=3, debug=True, stand_alone=True)
     
     # add peer with LMK from private.py
     with open("peers.json", "r") as f:

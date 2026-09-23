@@ -7,7 +7,7 @@
 # Creates the three demo channels expected by the TUI:
 #   channel 1 : button  (GPIO41 input,  timer driven)
 #   channel 2 : rgb     (GPIO35 NeoPixel output)
-#   channel 3 : espnow  (ESP-NOW ingress; also the Wi-Fi channel number)
+#   channel 3 : espnow  (ESP-NOW ingress; Wi-Fi channel from private.py)
 #
 # From the REPL:
 #   import sensor_test
@@ -27,29 +27,19 @@ espnow = None
 def run(items = ("button", "rgb", "espnow")):
     """Create and start the requested test sensors.
 
-    Returns without doing anything if any test sensor is already active.
-    Button polling is started automatically; on failure all created
-    sensors are closed again before re-raising.
+    Sensors that are already active are left untouched; only the missing
+    ones are created, so run() can repair a partially stopped set.
+    Button polling is started automatically; on failure all sensors
+    created in this call are closed again before re-raising.
     """
     global button, rgb, espnow
-
-    enabled = set()
-    if "button" in items:
-        enabled.add(button)
-    if "rgb" in items:
-        enabled.add(rgb)
-    if "espnow" in items:
-        enabled.add(espnow)
-
-    if any(item is not None for item in enabled):
-        return
 
     created = []
 
     try:
         if "button" in items and button is None:
-                button = DigitalInputSensor(1, 41, timer_id=1)
-                created.append(button)
+            button = DigitalInputSensor(1, 41, timer_id=1)
+            created.append(button)
         if "rgb" in items and rgb is None:
             rgb = RGBOutputSensor(2, 35)
             created.append(rgb)

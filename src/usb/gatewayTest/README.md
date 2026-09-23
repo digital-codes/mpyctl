@@ -34,8 +34,9 @@ The Linux TUI successfully receives button events and controls the RGB LED.
 Current implementation:
 
 - Wi-Fi STA is activated before ESP-NOW (required on ESP32).
-- In gateway mode the ingress sensor registers channel 3; the channel id
-  doubles as the Wi-Fi channel number.
+- In gateway mode the ingress sensor registers USB channel 3. The Wi-Fi
+  channel is always read from `private.py` `ENOW_CHANNEL` and is
+  independent of the USB channel number.
 - On-air message: 16-byte shared key header + application data.
 - USB event payload: 6-byte source MAC + 1-byte RSSI (offset by 256) +
   application data.
@@ -58,14 +59,14 @@ The ESP-NOW server (gateway mode and stand-alone) reads `/config.json`:
 }
 ```
 
-`espnow_client_example.py` (and the stand-alone entry point in
-`espnow_server.py`) use `private.py`:
+All ESP-NOW code (server and client) uses `private.py`:
 
->   ENOW_SERVER = \<hex mac address (no : )\>
-    ENOW_KEY = \<hex key; first 16 bytes are the PMK and the message header\>
-    ENOW_CHANNEL = \<Wi-Fi channel\>
+>   ENOW_SERVER = \<hex mac address (no : )\> (client only)
+    ENOW_KEY = \<hex key; first 16 bytes are the PMK and the message header\> (client only)
+    ENOW_CHANNEL = \<Wi-Fi channel\> (all modes)
 
-and `config.json` `ble.key` as the LMK for encrypted unicast.
+`espnow_client_example.py` additionally uses `config.json` `ble.key` as
+the LMK for encrypted unicast.
 Encryption only works when every peer is registered with the same LMK:
 the server via `enableNode(mac, lmk)` or `peers.json`, the client via
 `radio.add_peer(SERVER_MAC, LMK, ...)`.
@@ -100,7 +101,8 @@ button_sensor.py        channel 1, GPIO41 input
 rgb_sensor.py           channel 2, GPIO35 NeoPixel output
 espnow_server.py        channel 3, ESP-NOW ingress
 config.json             shared key / LMK, device id, own MAC
-private.py, peers.json  stand-alone ESP-NOW testing only
+private.py              Wi-Fi channel (ENOW_CHANNEL), client/stand-alone keys
+peers.json              stand-alone ESP-NOW testing only
 
 sensor_test.py
     creates the test sensors
@@ -134,9 +136,10 @@ Copy:
 - espnow_server.py
 - sensor_test.py
 
-to the board. Add `config.json` (see the ESP-NOW configuration section)
-if the ESP-NOW sensor is used; `espnow_server.py` refuses to start
-without it.
+to the board. Add `config.json` and `private.py` (see the ESP-NOW
+configuration section) if the ESP-NOW sensor is used; `espnow_server.py`
+refuses to start without `config.json` and imports `private.py` for the
+Wi-Fi channel.
 
 Power-cycle afterwards.
 

@@ -38,7 +38,7 @@ try:
         print("Config:", config)
 except Exception as e:
     print("Failed to load config.json:", e)
-    LMK = None
+    config = {}
 
 # set lmk from key
 LMK = bytes.fromhex(config["ble"]["key"]) if "ble" in config and "key" in config["ble"] else None

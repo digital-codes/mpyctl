@@ -1,5 +1,5 @@
-# SPDX-License-Identifier: AGPL-3.0-only
 #!/usr/bin/env python3
+# SPDX-License-Identifier: AGPL-3.0-only
 """Fedora terminal UI for the AtomS3U USB sensor gateway.
 
 Host counterpart of the MicroPython application sensor_test.py. Talks to
