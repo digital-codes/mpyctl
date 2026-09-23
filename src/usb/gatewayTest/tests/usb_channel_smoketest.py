@@ -313,13 +313,13 @@ def run_scenario(sync_in):
     assert set(h.server.channels) == {0, 1, 2, 3}, sorted(h.server.channels)
 
     st = sensor_test
-    assert st.button is not None and st.rgb is not None and st.espnow is not None
-    debug(f"Sensors created: button={st.button is not None}, rgb={st.rgb is not None}, espnow={st.espnow is not None}")
+    assert st.button is not None and st.rgb is not None and st.radio is not None
+    debug(f"Sensors created: button={st.button is not None}, rgb={st.rgb is not None}, radio={st.radio is not None}")
 
     # Wi-Fi channel from private.py, USB channel stays 3
-    assert st.espnow.wifi_channel == WIFI_CHANNEL, st.espnow.wifi_channel
-    assert st.espnow.channel_id == 3
-    wlan = st.espnow.wlan
+    assert st.radio.wifi_channel == WIFI_CHANNEL, st.espnow.wifi_channel
+    assert st.radio.channel_id == 3
+    wlan = st.radio.wlan
     assert ((), {"channel": WIFI_CHANNEL}) in wlan.cfg_calls, wlan.cfg_calls
 
     add_events = take(mark)  # channel-added announcements + initial button state
@@ -391,7 +391,7 @@ def run_scenario(sync_in):
     debug("Testing drain past unknown peers...")
     mac_unknown = bytes.fromhex("deadbeef0001")
     mac_peer = bytes.fromhex("aabbccddeeff")
-    e = st.espnow
+    e = st.radio
     e.enableNode(mac_peer, lmk=b"\x5a" * 16)
     e.radio.rx = [
         (mac_unknown, SHARED_KEY + b"junk"),
@@ -412,7 +412,7 @@ def run_scenario(sync_in):
 
     # --- peer_add and peer_del via USB channel -------------------------
     debug("Testing MSG_PEER_ADD and MSG_PEER_DEL...")
-    e = st.espnow
+    e = st.radio
     assert e.get_peer_count() == 1, "should have 1 peer (mac_peer)"
 
     # Send MSG_PEER_ADD to add a new peer
@@ -446,15 +446,15 @@ def run_scenario(sync_in):
     # --- run() repairs a partially stopped set ------------------------
     b0, r0 = st.button, st.rgb
     mark = h.mark()
-    st.stop(("espnow",))
+    st.stop(("radio",))
     dropped = take(mark)
     assert (0, ucs.MSG_CHANNEL_REMOVED, b"\x03") in dropped
-    assert 3 not in h.server.channels and st.espnow is None
+    assert 3 not in h.server.channels and st.radio is None
 
     with redirect_stdout(io.StringIO()):
         st.run()                    # requests all three again
     assert st.button is b0 and st.rgb is r0, "live sensors must be untouched"
-    assert st.espnow is not None, "missing espnow sensor must be recreated"
+    assert st.radio is not None, "missing espnow sensor must be recreated"
     assert set(h.server.channels) == {0, 1, 2, 3}
 
     # idempotent when everything is live
@@ -480,7 +480,7 @@ def run_scenario(sync_in):
         pass
 
     combined = st.stats()
-    assert combined["usb"]["rx_frames"] >= 5 and combined["espnow"] is not None
+    assert combined["usb"]["rx_frames"] >= 5 and combined["radio"] is not None
 
     st.stop()
     h.flush()
