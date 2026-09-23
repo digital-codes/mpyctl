@@ -23,8 +23,7 @@ import time
 import sys
 import os
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
-from common.channel_defs import (
+from channel_defs import (
     MSG_DATA,
     MSG_COMMAND,
     MSG_RESPONSE,

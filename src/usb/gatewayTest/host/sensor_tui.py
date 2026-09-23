@@ -375,17 +375,16 @@ class TUI:
         self.input_text = ""
         self.input_peer = 0
         self.input_mode = False
-        self._load_peers()
+        self._load_peers_from_file()
 
-    def _load_peers(self):
-        """Load peers from peers.json in the stick directory and send to device."""
+    def _load_peers_from_file(self):
+        """Load peers from peers.json (but don't send to device yet)."""
         try:
             peers_path = os.path.normpath(self.PEERS_PATH)
             if os.path.exists(peers_path):
                 with open(peers_path, "r") as f:
                     self.peers = json.load(f)
                 print(f"Loaded {len(self.peers)} peers from {peers_path}")
-                self._send_peers_to_device()
             else:
                 print(f"Peers file not found: {peers_path}")
         except Exception as e:
@@ -427,6 +426,7 @@ class TUI:
             MSG_CHANNEL_LIST_REQUEST,
         )
         self.send_control(CTRL_GET_STATUS)
+        self._send_peers_to_device()
 
     def send_espnow_message(self, peer_index, message):
         """Send a message to a specific peer via ESP-NOW channel.

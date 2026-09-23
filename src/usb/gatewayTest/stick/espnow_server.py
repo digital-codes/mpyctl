@@ -32,11 +32,8 @@ import network
 import espnow
 import private as pr
 import usb_channel_server as ucs
-import sys
-import os as os_mod
-sys.path.insert(0, os_mod.path.join(os_mod.path.dirname(__file__), ".."))
-from common.channel_defs import KIND_BIDI, DIR_BIDI, MSG_EVENT, MSG_COMMAND, MSG_PEER_ADD, MSG_PEER_DEL
 import time
+from channel_defs import KIND_BIDI, DIR_BIDI, MSG_EVENT, MSG_COMMAND, MSG_PEER_ADD, MSG_PEER_DEL
     
 # config stuff
 _CONF_FILE = "config.json"

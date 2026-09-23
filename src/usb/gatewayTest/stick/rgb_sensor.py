@@ -10,7 +10,7 @@
 import machine
 import neopixel
 import usb_channel_server as ucs
-from common.channel_defs import KIND_OUTPUT, DIR_OUT, MSG_COMMAND, MSG_RESPONSE
+from channel_defs import KIND_OUTPUT, DIR_OUT, MSG_COMMAND, MSG_RESPONSE
 
 
 class RGBOutputSensor:

@@ -33,6 +33,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)                      # gatewayTest/
 STICK = os.path.join(ROOT, "stick")               # AtomS3U MicroPython
 HOST = os.path.join(ROOT, "host")                 # Linux TUI
+COMMON = os.path.join(ROOT, "common")              # common/
 
 WIFI_CHANNEL = 6          # pretend private.ENOW_CHANNEL (must NOT equal channel id 3)
 SHARED_KEY = bytes.fromhex("00112233445566778899aabbccddeeff")
@@ -214,6 +215,7 @@ sys.modules["usb.util"] = usb_util
 # --- real modules under test -----------------------------------------
 sys.path.insert(0, STICK)
 sys.path.insert(0, HOST)
+sys.path.insert(0, COMMON)
 import usb_channel_server as ucs
 import sensor_test
 import espnow_server
