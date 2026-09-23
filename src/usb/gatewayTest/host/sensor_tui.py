@@ -531,97 +531,33 @@ class TUI:
                 screen.addnstr(row, 0, text, max(0, columns - 1))
 
         line(0, "AtomS3U Sensor Gateway")
-        line(1, "=" * min(72, columns - 1))
-        line(3, "Status: " + self.status)
-        line(4, "Button GPIO41: " + self.button)
-        line(5, "RGB GPIO35: %r" % (self.rgb,))
-        line(
-            6,
-            "Host USB RX/TX: %d/%d bytes; reader=%s"
-            % (
-                self.gateway.rx_bytes,
-                self.gateway.tx_bytes,
-                "alive" if self.gateway.reader_alive else "stopped",
-            ),
-        )
+        line(1, "Status: %s | Button: %s | RGB: %r" % (self.status, self.button, self.rgb))
 
         if self.gateway_status:
             status = self.gateway_status
-            line(
-                7,
-                "Gateway debug=%s open=%s out=%s tx_busy=%s queue=%d"
-                % (
-                    status["debug"],
-                    status["interface_open"],
-                    status["out_armed"],
-                    status["tx_busy"],
-                    status["queued"],
-                ),
-            )
-            line(
-                8,
-                "Frames RX/TX=%d/%d parse=%d usb=%d dropped=%d log=%d"
-                % (
-                    status["rx_frames"],
-                    status["tx_frames"],
-                    status["parse_errors"],
-                    status["usb_errors"],
-                    status["tx_dropped"],
-                    status["debug_entries"],
-                ),
-            )
+            line(2, "RX=%d TX=%d q=%d | debug=%s open=%s"
+                 % (status["rx_frames"], status["tx_frames"], status["queued"],
+                    status["debug"], status["interface_open"]))
 
-        line(10, "Channels:")
-        row = 11
-        for channel_id in sorted(self.channels):
-            channel = self.channels[channel_id]
-            line(
-                row,
-                "  %3d %-18s kind=%d dir=%d max=%d"
-                % (
-                    channel.channel_id,
-                    channel.name,
-                    channel.kind,
-                    channel.direction,
-                    channel.max_packet,
-                ),
-            )
+        line(3, "Channels: " + ", ".join("%d:%s" % (c.id, c.name) for c in sorted(self.channels.values(), key=lambda x: x.channel_id)))
+
+        row = 4
+        if self.esp_messages:
+            line(row, "ESP-NOW: " + self.esp_messages[-1])
             row += 1
 
-        row += 1
-        line(row, "ESP-NOW messages:")
-        row += 1
-        # show only the last two messages to avoid cluttering the screen
-        for message in self.esp_messages[-2:]:
-            line(row, "  " + message)
-            row += 1
-
-        # Show peers list
-        if self.peers:
-            row += 1
-            line(row, "Peers:")
-            row += 1
-            for idx, peer in enumerate(self.peers):
-                mac = peer.get("mac", "unknown")
-                line(row, "  %d: %s" % (idx, mac))
-                row += 1
-
-        # Show input field when in input mode
-        row += 1
         if self.input_mode:
             if self.peers and 0 <= self.input_peer < len(self.peers):
                 selected_mac = self.peers[self.input_peer].get("mac", "unknown")
-                line(row, "Peer %d: %s" % (self.input_peer, selected_mac))
+                line(row, "To peer %d (%s): %s" % (self.input_peer, selected_mac, self.input_text))
             else:
-                line(row, "Send to peer [0-%d]: " % (len(self.peers) - 1 if self.peers else 0))
+                line(row, "Peer [0-%d]: %s" % (len(self.peers) - 1 if self.peers else 0, self.input_text))
             row += 1
-            prompt = "Message: "
-            line(row, prompt + self.input_text)
-            line(row + 1, "Press Enter to send, Esc to cancel, Up/Down to change peer")
+            line(row, "Enter=send, Esc=cancel, Up/Down=peer")
         else:
-            line(row, "Press m to send ESP-NOW message")
+            line(row, "Keys: r/g/b/w/y/0=RGB, p=ping, c=ch, m=msg, q=quit")
 
-        footer = max(row + 3, rows - 4)
+        footer = max(row + 2, rows - 2)
         line(
             footer,
             "Keys: r/g/b/w/y LED, 0 off, p ping, c channels, "
