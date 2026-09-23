@@ -375,6 +375,7 @@ class TUI:
         self.input_text = ""
         self.input_peer = 0
         self.input_mode = False
+        self.last_action = ""
         self._load_peers_from_file()
 
     def _load_peers_from_file(self):
@@ -450,8 +451,10 @@ class TUI:
         if channel == CHANNEL_CONTROL:
             if msg_type == MSG_PONG:
                 self.status = "controller online"
+                self.last_action = ""
             elif msg_type == MSG_CHANNEL_LIST_RESPONSE:
                 self.channels = parse_channels(payload)
+                self.last_action = ""
             elif msg_type == MSG_CHANNEL_ADDED:
                 descriptor = bytes((1,)) + payload
                 self.channels.update(parse_channels(descriptor))
@@ -459,6 +462,7 @@ class TUI:
                 self.channels.pop(payload[0], None)
             elif msg_type == MSG_STATUS:
                 self.gateway_status = parse_status(payload)
+                self.last_action = ""
                 self.debug_requested = self.gateway_status["debug"]
             elif msg_type == MSG_ERROR:
                 related = payload[0] if len(payload) > 0 else -1
@@ -531,7 +535,7 @@ class TUI:
                 screen.addnstr(row, 0, text, max(0, columns - 1))
 
         line(0, "AtomS3U Sensor Gateway")
-        line(1, "Status: %s | Button: %s | RGB: %r" % (self.status, self.button, self.rgb))
+        line(1, "Status: %s | Button: %s | RGB: %r%s" % (self.status, self.button, self.rgb, " | " + self.last_action if self.last_action else ""))
 
         if self.gateway_status:
             status = self.gateway_status
@@ -631,20 +635,25 @@ class TUI:
                     )
                 elif key == ord("p"):
                     self.gateway.send(CHANNEL_CONTROL, MSG_PING)
+                    self.last_action = "ping sent"
                 elif key == ord("c"):
                     self.gateway.send(
                         CHANNEL_CONTROL,
                         MSG_CHANNEL_LIST_REQUEST,
                     )
+                    self.last_action = "channels requested"
                 elif key == ord("d"):
                     self.send_control(
                         CTRL_SET_DEBUG,
                         0 if self.debug_requested else 1,
                     )
+                    self.last_action = "debug toggled"
                 elif key == ord("s"):
                     self.send_control(CTRL_GET_STATUS)
+                    self.last_action = "status requested"
                 elif key == ord("x"):
                     self.send_control(CTRL_CLEAR_DEBUG)
+                    self.last_action = "log cleared"
             except Exception as exc:
                 self.last_error = str(exc)
 
