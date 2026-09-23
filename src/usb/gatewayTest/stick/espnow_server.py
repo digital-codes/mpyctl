@@ -150,14 +150,26 @@ class ESPNowIngressSensor:
 
     def enableNode(self, mac, lmk=None):
         """Enable a node with the given MAC address and optional LMK. Use LMK from individual device config BLE key.
-        so server send as receives with LMK as node BLE key.
+        so server send as receives with LMK as node BLE key. Silently succeeds if peer already exists.
         """
-        if lmk is not None:
-            self.radio.add_peer(mac, lmk, channel=self.wifi_channel)
-        else:
-            self.radio.add_peer(mac, channel=self.wifi_channel) 
-        if self.debug:
-            print("Enabled peer:", mac, "LMK:", lmk)
+        try:
+            existing = self.radio.get_peer(mac)
+            if existing is not None:
+                if self.debug:
+                    print("Peer already exists:", mac.hex())
+                return
+        except Exception:
+            pass
+        try:
+            if lmk is not None:
+                self.radio.add_peer(mac, lmk, channel=self.wifi_channel)
+            else:
+                self.radio.add_peer(mac, channel=self.wifi_channel)
+            if self.debug:
+                print("Enabled peer:", mac, "LMK:", lmk)
+        except OSError as e:
+            if self.debug:
+                print("Failed to enable peer:", mac.hex(), "Error:", e)
 
 
     def disableNode(self, mac):
