@@ -43,9 +43,10 @@ Current implementation:
 
 Testing status (2026-09-23):
 
-- **Client to server is verified, with encryption, when the LMK is set.**
-  `espnow_client_example.py` runs on a second ESP32 board.
-- **Server to client is implemented (pending verification).**
+- **Both directions work with encryption and multiple peers.**
+  `espnow_client_example.py` runs on a second ESP32 board. Multiple peers
+  are supported via `peers.json` - each peer has its own LMK for encrypted
+  communication.
 
 #### Configuration
 
