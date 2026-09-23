@@ -215,7 +215,8 @@ Current keys:
 - c : Read channel list
 - r/g/b/w/y/0 : RGB LED
 - d : Toggle device debug
-- s : Request gateway status
+- s : Refresh gateway status (RX/TX counters update)
+- c : Refresh channel list (only needed when channels change dynamically)
 - x : Clear debug log
 - m : Send ESP-NOW message (prompts for peer and message)
 - q : Quit
