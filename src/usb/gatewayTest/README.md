@@ -217,6 +217,7 @@ Current keys:
 - d : Toggle device debug
 - s : Request gateway status
 - x : Clear debug log
+- m : Send ESP-NOW message (prompts for peer and message)
 - q : Quit
 
 ---
