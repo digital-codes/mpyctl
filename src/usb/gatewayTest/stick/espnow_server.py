@@ -130,10 +130,10 @@ class ESPNowIngressSensor:
             self.gateway.register_channel(
                 channel_id,
                 self.KIND,
-                ucs.DIR_IN,
+                ucs.DIR_BIDI,
                 250,
                 name,
-                None,
+                self._handle_outbound,
             )
 
 
@@ -237,6 +237,36 @@ class ESPNowIngressSensor:
                 self.received += 1
                 if self.debug:
                     print("Received message from", mac, "RSSI:", rssi, "Data:", application_data)
+
+    def _handle_outbound(self, msg_type, payload):
+        """Handle outbound messages from the host.
+
+        Payload format: peer_index:u8 + message:string
+        Sends the message to the specified peer via ESP-NOW.
+        """
+        if msg_type == ucs.MSG_COMMAND:
+            if len(payload) < 1:
+                if self.debug:
+                    print("Outbound: no peer index specified")
+                return
+            
+            peer_index = payload[0]
+            message = payload[1:].decode("utf-8", "replace")
+            
+            peer_macs = self.get_peer_macs()
+            if peer_index >= len(peer_macs):
+                if self.debug:
+                    print(f"Outbound: invalid peer index {peer_index} (max {len(peer_macs)-1})")
+                return
+            
+            mac = peer_macs[peer_index]
+            # Prepend shared key header for consistency
+            full_payload = self.shared_key[:16] + message.encode()
+            
+            if self.debug:
+                print(f"Outbound to peer {peer_index} ({mac.hex()}): {message}")
+            
+            self.send_to_peer(mac, full_payload)
 
     def send_to_peer(self, mac, message):
         """Send a message to a specific peer. Returns True on success."""

@@ -13,7 +13,7 @@ device: 0 control, 1 button, 2 rgb, 3 espnow.
 
 Keys: r/g/b/w/y set the LED colour, 0 turns it off, p ping, c channel
 list, d toggle device debug, s request gateway status, x clear the
-device debug log, q (or ESC) quit.
+device debug log, Enter send espnow message, q (or ESC) quit.
 
 Requires pyusb. Optional --serial selects among several attached boards.
 """
@@ -22,6 +22,8 @@ from __future__ import annotations
 
 import argparse
 import curses
+import json
+import os
 import queue
 import signal
 import threading
@@ -351,6 +353,9 @@ class TUI:
         ord("y"): (255, 255, 0),
     }
 
+    # Path to stick directory for peers.json
+    PEERS_PATH = os.path.join(os.path.dirname(__file__), "..", "stick", "peers.json")
+
     def __init__(self, gateway):
         self.gateway = gateway
         self.shutdown = threading.Event()
@@ -362,6 +367,25 @@ class TUI:
         self.esp_messages = []
         self.gateway_status = None
         self.debug_requested = False
+        self.peers = []
+        self.input_text = ""
+        self.input_peer = 0
+        self.input_mode = False
+        self._load_peers()
+
+    def _load_peers(self):
+        """Load peers from peers.json in the stick directory."""
+        try:
+            peers_path = os.path.normpath(self.PEERS_PATH)
+            if os.path.exists(peers_path):
+                with open(peers_path, "r") as f:
+                    self.peers = json.load(f)
+                print(f"Loaded {len(self.peers)} peers from {peers_path}")
+            else:
+                print(f"Peers file not found: {peers_path}")
+        except Exception as e:
+            print(f"Failed to load peers: {e}")
+            self.peers = []
 
     def send_control(self, command, argument=None):
         """Send a CTRL_* command on the control channel."""
@@ -378,6 +402,28 @@ class TUI:
             MSG_CHANNEL_LIST_REQUEST,
         )
         self.send_control(CTRL_GET_STATUS)
+
+    def send_espnow_message(self, peer_index, message):
+        """Send a message to a specific peer via ESP-NOW channel.
+        
+        Payload format: peer_index:u8 + message:string
+        """
+        if peer_index >= len(self.peers):
+            self.last_error = f"Invalid peer index {peer_index}"
+            return False
+        
+        payload = bytes([peer_index]) + message.encode()
+        try:
+            self.gateway.send(CHANNEL_ESPNOW, MSG_COMMAND, payload)
+            self.esp_messages.append(
+                "%s -> peer %d: %s"
+                % (time.strftime("%H:%M:%S"), peer_index, message)
+            )
+            self.esp_messages = self.esp_messages[-8:]
+            return True
+        except Exception as e:
+            self.last_error = f"Send failed: {e}"
+            return False
 
     def handle_frame(self, channel, msg_type, payload):
         """Update TUI state from one device frame."""
@@ -523,11 +569,32 @@ class TUI:
             line(row, "  " + message)
             row += 1
 
-        footer = max(row + 1, rows - 4)
+        # Show peers list
+        if self.peers:
+            row += 1
+            line(row, "Peers:")
+            row += 1
+            for idx, peer in enumerate(self.peers):
+                mac = peer.get("mac", "unknown")
+                line(row, "  %d: %s" % (idx, mac))
+                row += 1
+
+        # Show input field when in input mode
+        row += 1
+        if self.input_mode:
+            line(row, "Send to peer [0-%d]: " % (len(self.peers) - 1 if self.peers else 0))
+            row += 1
+            prompt = "Message: "
+            line(row, prompt + self.input_text)
+            line(row + 1, "Press Enter to send, Esc to cancel")
+        else:
+            line(row, "Press m to send ESP-NOW message")
+
+        footer = max(row + 3, rows - 4)
         line(
             footer,
             "Keys: r/g/b/w/y LED, 0 off, p ping, c channels, "
-            "d debug, s status, x clear log, q quit",
+            "d debug, s status, x clear log, m msg, q quit",
         )
         if self.last_error:
             line(footer + 1, "Error: " + self.last_error)
@@ -551,8 +618,44 @@ class TUI:
                 continue
 
             try:
-                if key in (ord("q"), 27):
+                if self.input_mode:
+                    # Handle input mode
+                    if key in (ord("\n"), curses.KEY_ENTER):
+                        # Send message
+                        if self.input_text.strip() and self.peers:
+                            self.send_espnow_message(self.input_peer, self.input_text.strip())
+                        self.input_text = ""
+                        self.input_mode = False
+                        curses.curs_set(0)
+                    elif key == 27:  # Escape
+                        self.input_text = ""
+                        self.input_mode = False
+                        curses.curs_set(0)
+                    elif key in (curses.KEY_BACKSPACE, 127, 8):
+                        # Backspace
+                        self.input_text = self.input_text[:-1]
+                    elif key == curses.KEY_UP:
+                        # Previous peer
+                        if self.peers:
+                            self.input_peer = (self.input_peer - 1) % len(self.peers)
+                    elif key == curses.KEY_DOWN:
+                        # Next peer
+                        if self.peers:
+                            self.input_peer = (self.input_peer + 1) % len(self.peers)
+                    elif 32 <= key <= 126:
+                        # Printable character
+                        self.input_text += chr(key)
+                elif key in (ord("q"), 27):
                     self.shutdown.set()
+                elif key == ord("m"):
+                    # Enter message mode
+                    if self.peers:
+                        self.input_mode = True
+                        self.input_text = ""
+                        self.input_peer = 0
+                        curses.curs_set(1)
+                    else:
+                        self.last_error = "No peers configured"
                 elif key in self.COLORS:
                     self.gateway.send(
                         CHANNEL_RGB,
