@@ -45,7 +45,6 @@ except Exception:
     AP_CHANNEL = 3
 
 AP_LISTEN_PORT = 8080
-AP_DISCOVERY_PORT = 8081
 HEADER_LEN = 16  # Shared key header length
 
 # config stuff
@@ -88,7 +87,6 @@ class WiFiServer:
         
         # Server socket and client connections
         self.server_socket = None
-        self.discovery_socket = None
         self.clients = {}  # addr -> (socket, mac)
         self.accepting = False
         self.irq_pending = False
@@ -184,12 +182,12 @@ class WiFiServer:
         print("WiFiServer: Server will bind to IP:", self.server_ip)
 
     def start_server(self):
-        """Start accepting TCP connections and UDP discovery."""
+        """Start accepting TCP connections."""
         if self.server_socket is not None:
             return
-        
+
         print("WiFiServer: Starting TCP server on %s:%d..." % (self.server_ip, AP_LISTEN_PORT))
-        
+
         # Start TCP server - bind to the actual IP address
         try:
             self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -198,32 +196,15 @@ class WiFiServer:
             self.server_socket.listen(5)
             self.server_socket.settimeout(1.0)  # Non-blocking with timeout
             self.accepting = True
-            
+
             print("WiFiServer: TCP server listening on %s:%d" % (self.server_ip, AP_LISTEN_PORT))
         except Exception as e:
             print("WiFiServer: ERROR - failed to start TCP server:", e)
             self.server_socket = None
             self.accepting = False
-        
-        # Start UDP discovery listener
-        self._start_discovery()
 
         # Start polling timer
         self._start_timer()
-
-    def _start_discovery(self):
-        """Start UDP listener for client discovery."""
-        print("WiFiServer: Starting UDP discovery on port", AP_DISCOVERY_PORT)
-        try:
-            self.discovery_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-            self.discovery_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-            self.discovery_socket.bind(('', AP_DISCOVERY_PORT))
-            self.discovery_socket.settimeout(1.0)
-            
-            print("WiFiServer: UDP discovery listening on port", AP_DISCOVERY_PORT)
-        except Exception as e:
-            print("WiFiServer: ERROR - failed to start UDP discovery:", e)
-            self.discovery_socket = None
 
     def _start_timer(self):
         """Start polling timer."""
@@ -256,14 +237,6 @@ class WiFiServer:
             except Exception:
                 pass
             self.server_socket = None
-        
-        # Close discovery socket
-        if self.discovery_socket:
-            try:
-                self.discovery_socket.close()
-            except Exception:
-                pass
-            self.discovery_socket = None
 
         # Stop polling timer
         self._stop_timer()
@@ -343,29 +316,10 @@ class WiFiServer:
                 pass  # No pending connection
             except Exception as e:
                 print("WiFiServer: ERROR - accept:", e)
-        
-        # Check for UDP discovery requests
-        if self.discovery_socket:
-            self._check_discovery()
-        
+
         # Check each client for data
         for addr in list(self.clients.keys()):
             self._check_client_data(addr)
-
-    def _check_discovery(self):
-        """Check for and respond to UDP discovery requests."""
-        try:
-            self.discovery_socket.setblocking(False)
-            data, addr = self.discovery_socket.recvfrom(1024)
-            if data == b"DISCOVER_MPY":
-                # Send acknowledgment with our IP
-                response = b"DISCOVER_ACK:" + self.server_ip.encode()
-                self.discovery_socket.sendto(response, addr)
-                print("WiFiServer: Discovery response sent to %s: %s" % (str(addr), response))
-        except OSError:
-            pass  # No data
-        except Exception as e:
-            print("WiFiServer: ERROR - discovery:", e)
 
     def _handle_new_connection(self, sock, addr):
         """Handle a new TCP connection."""
@@ -585,7 +539,6 @@ class WiFiServer:
             "server": {
                 "port": AP_LISTEN_PORT,
                 "listening": self.accepting,
-                "discovery_port": AP_DISCOVERY_PORT,
             },
             "stats": {
                 "connected": self.connected,

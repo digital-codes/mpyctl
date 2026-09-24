@@ -28,9 +28,7 @@ WIFI_SSID = pr.WIFI_SSID
 WIFI_PASSWORD = pr.WIFI_PASSWORD
 WIFI_CHANNEL = pr.WIFI_CHANNEL
 SERVER_PORT = 8080
-DISCOVERY_PORT = 8081
 SHARED_KEY = bytes.fromhex(pr.WIFI_KEY[:32])
-DEFAULT_SERVER_IP = "192.168.1.1"  # Fallback if discovery fails
 
 print("WiFi Client starting...")
 print("SSID:", WIFI_SSID)
