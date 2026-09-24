@@ -103,6 +103,11 @@ class WiFiServer:
         self.tx_errors = 0
         self.rx_errors = 0
 
+        # Timer for polling
+        self.timer = None
+        self.timer_id = 3
+        self.poll_ms = 100
+
         # Get AP settings
         global AP_SSID, AP_PASSWORD, AP_CHANNEL
         self.ssid = AP_SSID
@@ -203,6 +208,9 @@ class WiFiServer:
         # Start UDP discovery listener
         self._start_discovery()
 
+        # Start polling timer
+        self._start_timer()
+
     def _start_discovery(self):
         """Start UDP listener for client discovery."""
         print("WiFiServer: Starting UDP discovery on port", AP_DISCOVERY_PORT)
@@ -216,6 +224,22 @@ class WiFiServer:
         except Exception as e:
             print("WiFiServer: ERROR - failed to start UDP discovery:", e)
             self.discovery_socket = None
+
+    def _start_timer(self):
+        """Start polling timer."""
+        import machine
+        self.timer = machine.Timer(self.timer_id)
+        self.timer.init(period=self.poll_ms, mode=machine.Timer.PERIODIC, callback=self._timer_callback)
+
+    def _timer_callback(self, t):
+        """Timer callback to poll for connections and data."""
+        micropython.schedule(self._poll, None)
+
+    def _stop_timer(self):
+        """Stop polling timer."""
+        if self.timer:
+            self.timer.deinit()
+            self.timer = None
 
     def stop_server(self):
         """Stop accepting TCP connections and close all client sockets."""
@@ -240,6 +264,9 @@ class WiFiServer:
             except Exception:
                 pass
             self.discovery_socket = None
+
+        # Stop polling timer
+        self._stop_timer()
 
     def _close_client(self, addr):
         """Close a specific client connection."""
