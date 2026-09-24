@@ -146,9 +146,10 @@ The client sends `sensor message <n>` every 5 seconds.
 
 ### How It Works
 
-- Creates Access Point: SSID "MPY", password "xxx", channel 3
+- Creates Access Point: SSID "MPY", password from `private.py`, channel 3
 - TCP server on port 8080
-- Only authorized MAC addresses can connect
+- Gateway IP: 192.168.4.1 (always .1 of AP subnet)
+- Clients auto-authorize on first data (no peer management needed)
 - Same 16-byte shared key header protocol as ESP-NOW
 
 ### Configuration
@@ -157,11 +158,20 @@ WiFi uses the same `config.json` as ESP-NOW. Additional `private.py` settings:
 
 ```python
 WIFI_SSID = "MPY"
-WIFI_PASSWORD = "xxx"
+WIFI_PASSWORD = "xxx"          # WPA2 auth (authmode=3)
 WIFI_CHANNEL = 3
-WIFI_SERVER_IP = "192.168.1.1"
 WIFI_PORT = 8080
-WIFI_KEY = <hex key>        # Same as ENOW_KEY for shared key
+WIFI_KEY = <hex key>           # Same as ENOW_KEY for shared key
+```
+
+### Running the Server
+
+On the AtomS3U device:
+
+```python
+import sensor_test_wifi
+sensor_test_wifi.run()              # Start with debug=False
+sensor_test_wifi.run(debug=True)    # Start with debug output
 ```
 
 ### Running the Client (MicroPython)
@@ -171,13 +181,17 @@ Copy to a second ESP32 and run:
 - `stick/private.py`
 - `config.json`
 
+Client automatically uses gateway IP from WiFi interface config.
+
 ### Running the Client (Linux)
 
 ```bash
-python3 host/wifi_client.py                    # Interactive mode
-python3 host/wifi_client.py -m "hello"         # Single message
-python3 host/wifi_client.py --server-ip 192.168.1.1 --port 8080
+python3 host/wifi_client.py -i wlan0              # Auto-detect gateway from interface
+python3 host/wifi_client.py -i wlan0 -c 3         # Send 3 messages
+python3 host/wifi_client.py -i wlan0 -m "hello"  # Single message
 ```
+
+The client derives gateway IP (.1 of local subnet) from the specified interface.
 
 ---
 
@@ -307,7 +321,6 @@ ENOW_CHANNEL = 3
 WIFI_SSID = "MPY"
 WIFI_PASSWORD = "xxx"
 WIFI_CHANNEL = 3
-WIFI_SERVER_IP = "192.168.1.1"
 WIFI_PORT = 8080
 WIFI_KEY = "00112233445566778899aabbccddeeff"
 ```
