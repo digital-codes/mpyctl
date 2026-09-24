@@ -32,8 +32,43 @@ except ImportError:
     pr = None
 
 # Default configuration
-DEFAULT_SERVER_IP = "192.168.1.1"
 DEFAULT_PORT = 8080
+
+
+def get_interface_for_ip(target_ip):
+    """Auto-detect interface that can reach target IP."""
+    import subprocess
+    import re
+    try:
+        result = subprocess.run(
+            ["ip", "route", "get", target_ip],
+            capture_output=True, text=True, timeout=5
+        )
+        output = result.stdout
+        match = re.search(r'dev\s+(\S+)', output)
+        if match:
+            return match.group(1)
+    except Exception:
+        pass
+    return None
+
+
+def get_ifconfig(interface):
+    """Get IP config for interface using ifconfig."""
+    import subprocess
+    import re
+    try:
+        result = subprocess.run(
+            ["ifconfig", interface],
+            capture_output=True, text=True, timeout=5
+        )
+        output = result.stdout
+        match = re.search(r'inet\s+(\d+\.\d+\.\d+\.\d+)\s+netmask\s+(\d+\.\d+\.\d+\.\d+)', output)
+        if match:
+            return match.group(1), match.group(2)
+    except Exception:
+        pass
+    return None, None
 
 
 def load_private_config():
@@ -147,20 +182,38 @@ class WiFiClient:
 
 def main():
     parser = argparse.ArgumentParser(description="WiFi client for sensor gateway")
-    parser.add_argument("--server-ip", default=None, help="Server IP address")
+    parser.add_argument("-i", "--interface", help="Network interface (e.g., wlan0)")
+    parser.add_argument("--server-ip", default=None, help="Server IP address (default: auto-detect from interface)")
     parser.add_argument("--port", type=int, default=None, help="Server port")
     parser.add_argument("--message", "-m", help="Send a single message and exit")
     parser.add_argument("--count", "-c", type=int, default=5, help="Number of messages to send (default: 5)")
     parser.add_argument("--interval", "-i", type=int, default=5, help="Interval between messages in seconds (default: 5)")
     args = parser.parse_args()
-    
+
     # Load configuration
     config = load_private_config()
-    
-    server_ip = args.server_ip or config.get('server_ip', DEFAULT_SERVER_IP)
+
     port = args.port or config.get('port', DEFAULT_PORT)
     shared_key = config.get('shared_key', None)
-    
+
+    # Auto-detect server IP from interface if not provided
+    server_ip = args.server_ip
+    if not server_ip:
+        # Default to gateway .1 of current subnet
+        interface = args.interface
+        if not interface:
+            interface = get_interface_for_ip("192.168.4.1")
+        if interface:
+            local_ip, _ = get_ifconfig(interface)
+            if local_ip:
+                parts = [int(x) for x in local_ip.split('.')]
+                server_ip = f"{parts[0]}.{parts[1]}.{parts[2]}.1"
+                print(f"Auto-detected: interface={interface}, local={local_ip}, server={server_ip}")
+
+    if not server_ip:
+        print("Error: Could not auto-detect server IP. Use --server-ip option.")
+        sys.exit(1)
+
     print(f"WiFi Client")
     print(f"Server: {server_ip}:{port}")
     

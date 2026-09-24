@@ -66,7 +66,7 @@ except Exception:
 
 # Wait for connection
 print("Connecting to WiFi...")
-wlan.connect(WIFI_SSID) # , WIFI_PASSWORD)
+wlan.connect(WIFI_SSID, WIFI_PASSWORD)
 while not wlan.isconnected():
     print("Connecting to WiFi...")
     for _ in range(10):
@@ -75,7 +75,7 @@ while not wlan.isconnected():
         time.sleep(1)
 
 print("Connected! IP:", wlan.ifconfig()[0])
-SERVER_IP = wlan.ifconfig()[3]  # Use gateway as server
+SERVER_IP = wlan.ifconfig()[2]  # gateway
 print("Using server:", SERVER_IP)
 
 # Receive state
