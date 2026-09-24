@@ -131,8 +131,8 @@ class WiFiServer:
 
     def _init_wifi(self):
         """Initialize WiFi in AP mode."""
-        # Create AP interface
-        self.ap = network.WLAN(network.WLAN.IF_AP)
+        # Create AP interface (MicroPython uses network.AP_IF)
+        self.ap = network.WLAN(network.AP_IF)
         
         # Configure AP with SSID, password, and channel
         self.ap.config(essid=AP_SSID, password=AP_PASSWORD, channel=AP_CHANNEL)
@@ -293,7 +293,7 @@ class WiFiServer:
         
         sock, addr = self.clients[mac]
         try:
-            sock.setblocking(False)
+            sock.settimeout(0)  # Non-blocking for MicroPython
             data = sock.recv(1024)
             if data:
                 self._handle_client_data(mac, data)

@@ -137,7 +137,7 @@ network = types.ModuleType("network")
 
 class _WLAN:
     IF_STA = 0
-    IF_AP = 1
+    AP_IF = 1
     PM_NONE = 0
 
     def __init__(self, iface=None):
