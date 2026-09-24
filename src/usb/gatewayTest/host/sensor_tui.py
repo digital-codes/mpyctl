@@ -9,13 +9,14 @@ channel:u8, msg_type:u8, length:u16 le, payload.
 
 A background reader thread parses frames into an event queue; the curses
 main loop drains it and redraws. Fixed channel map expected from the
-device: 0 control, 1 button, 2 rgb, 3 espnow.
+device: 0 control, 1 button, 2 rgb, 3 espnow/wifi.
 
 Keys: r/g/b/w/y set the LED colour, 0 turns it off, p ping, c channel
 list, d toggle device debug, s request gateway status, x clear the
-device debug log, Enter send espnow message, q (or ESC) quit.
+device debug log, Enter send message, q (or ESC) quit.
 
 Requires pyusb. Optional --serial selects among several attached boards.
+Use -e for ESP-NOW mode or -w for WiFi mode.
 """
 
 from __future__ import annotations
@@ -360,8 +361,13 @@ class TUI:
     # Path to stick directory for peers.json
     PEERS_PATH = os.path.join(os.path.dirname(__file__), "..", "stick", "peers.json")
 
-    def __init__(self, gateway):
+    def __init__(self, gateway, use_wifi=False, use_espnow=False):
         self.gateway = gateway
+        self.use_wifi = use_wifi
+        self.use_espnow = use_espnow
+        # Determine which channel to use for messaging
+        # WiFi and ESP-NOW both use channel 3
+        self.wireless_channel = CHANNEL_ESPNOW if (use_wifi or use_espnow) else None
         self.shutdown = threading.Event()
         self.channels = {}
         self.button = "unknown"
@@ -448,18 +454,23 @@ class TUI:
         self._send_peers_to_device()
 
     def send_espnow_message(self, peer_index, message):
-        """Send a message to a specific peer via ESP-NOW channel.
+        """Send a message to a specific peer via wireless channel (ESP-NOW or WiFi).
 
         Payload format: peer_index:u8 + message:string
         """
+        if self.wireless_channel is None:
+            self.last_error = "No wireless channel configured (use -e or -w)"
+            return False
+
         if peer_index >= len(self.peers):
             self.last_error = f"Invalid peer index {peer_index}"
             return False
 
         payload = bytes([peer_index]) + message.encode()
         try:
-            self.gateway.send(CHANNEL_ESPNOW, MSG_COMMAND, payload)
-            self.last_action = "sent to peer %d: %s" % (peer_index, message[:20])
+            self.gateway.send(self.wireless_channel, MSG_COMMAND, payload)
+            mode = "WiFi" if self.use_wifi else "ESP-NOW"
+            self.last_action = f"sent via {mode} to peer {peer_index}: {message[:20]}"
             return True
         except Exception as e:
             self.last_error = f"Send failed: {e}"
@@ -676,10 +687,24 @@ def main():
     """Entry point: open the gateway and run the TUI until quit or signal."""
     parser = argparse.ArgumentParser()
     parser.add_argument("--serial")
+    parser.add_argument(
+        "-e", "--espnow",
+        action="store_true",
+        help="Use ESP-NOW radio (channel 3)"
+    )
+    parser.add_argument(
+        "-w", "--wifi",
+        action="store_true",
+        help="Use WiFi server (channel 3)"
+    )
     args = parser.parse_args()
 
+    # Validate mutually exclusive options
+    if args.espnow and args.wifi:
+        raise SystemExit("Error: -e (espnow) and -w (wifi) cannot be used together")
+
     gateway = USBGateway(serial=args.serial)
-    tui = TUI(gateway)
+    tui = TUI(gateway, use_wifi=args.wifi, use_espnow=args.espnow)
 
     def shutdown_handler(signum, frame):
         tui.shutdown.set()

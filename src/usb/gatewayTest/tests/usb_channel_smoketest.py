@@ -137,24 +137,84 @@ network = types.ModuleType("network")
 
 class _WLAN:
     IF_STA = 0
+    IF_AP = 1
     PM_NONE = 0
 
     def __init__(self, iface=None):
         self.cfg_calls = []
+        self._iface = iface
+        self._active = False
 
     def disconnect(self):
         pass
 
     def active(self, state=None):
+        if state is not None:
+            self._active = state
         return True
 
     def config(self, *args, **kwargs):
         self.cfg_calls.append((args, kwargs))
+        # Return appropriate values based on what's being configured
+        if args and args[0] == 'essid':
+            return True
+        if args and args[0] == 'channel':
+            return WIFI_CHANNEL
+        if args and args[0] == 'mac':
+            return b"\xaa" * 6
+        if args and args[0] == 'ip':
+            return '192.168.1.1'
         return {"channel": WIFI_CHANNEL, "mac": b"\xaa" * 6}
+
+    def ifconfig(self):
+        return ('192.168.1.1', '255.255.255.0', '192.168.1.1', '8.8.8.8')
 
 
 network.WLAN = _WLAN
 sys.modules["network"] = network
+
+# Socket mock for WiFi server
+socket_mod = types.ModuleType("socket")
+
+
+class _socket:
+    AF_INET = 2
+    SOCK_STREAM = 1
+    SOL_SOCKET = 4096
+    SO_REUSEADDR = 2
+
+    def __init__(self, family=AF_INET, type=SOCK_STREAM):
+        self.family = family
+        self.type = type
+        self._closed = False
+
+    def setsockopt(self, level, optname, value):
+        pass
+
+    def bind(self, address):
+        pass
+
+    def listen(self, backlog):
+        pass
+
+    def settimeout(self, timeout):
+        pass
+
+    def accept(self):
+        raise OSError("no pending connection")
+
+    def send(self, data):
+        return len(data)
+
+    def recv(self, bufsize):
+        return b""
+
+    def close(self):
+        self._closed = True
+
+
+socket_mod.socket = _socket
+sys.modules["socket"] = socket_mod
 
 espnow_mod = types.ModuleType("espnow")
 
