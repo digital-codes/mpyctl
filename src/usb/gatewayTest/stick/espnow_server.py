@@ -122,6 +122,10 @@ class ESPNowRadio:
             print("ESPNowRadio: wlan config:", self.wlan.config("channel"), self.wlan.config("mac"))
 
         self.radio = espnow.ESPNow()
+        # add some espnow defs to instance
+        self._radio_datalen = espnow.MAX_DATA_LEN
+        self._radio_crypt_peers = espnow.MAX_ENCRYPT_PEER_NUM
+        self._radio_total_peers = espnow.MAX_TOTAL_PEER_NUM 
         # ESP-NOW must be initialized before config() and set_pmk().
         self.radio.active(True)
         self.radio.config(rxbuf=4096, timeout_ms=0)
