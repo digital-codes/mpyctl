@@ -516,28 +516,42 @@ class TUI:
             return
 
         if channel == CHANNEL_ESPNOW and msg_type == MSG_EVENT:
-            if len(payload) >= 7:
-                # mac = ":".join("%02x" % b for b in payload[:6])
+            if len(payload) >= 6:
                 mac = payload[:6].hex()
-                raw_rssi = payload[6]
-                rssi = raw_rssi - 256 if raw_rssi >= 128 else raw_rssi
-                data = payload[7:]
+
+                if self.use_wifi:
+                    # WiFi: payload = MAC(6) + data (no RSSI)
+                    data = payload[6:]
+                    rssi_str = ""
+                else:
+                    # ESP-NOW: payload = MAC(6) + RSSI(1) + data
+                    if len(payload) >= 7:
+                        raw_rssi = payload[6]
+                        rssi = raw_rssi - 256 if raw_rssi >= 128 else raw_rssi
+                        rssi_str = f" RSSI {rssi}"
+                        data = payload[7:]
+                    else:
+                        rssi_str = ""
+                        data = b""
+
                 try:
                     display = data.decode("utf-8")
                 except UnicodeDecodeError:
                     display = data.hex(" ")
+
                 # Find matching peer index
                 peer_label = mac
                 for idx, peer in enumerate(self.peers):
                     if peer.get("mac", "").lower() == mac.lower():
                         peer_label = f"Peer {idx}"
                         break
+
                 self.esp_messages.append(
-                    "%s %s RSSI %d: %s"
+                    "%s %s%s: %s"
                     % (
                         time.strftime("%H:%M:%S"),
                         peer_label,
-                        rssi,
+                        rssi_str,
                         display,
                     )
                 )
