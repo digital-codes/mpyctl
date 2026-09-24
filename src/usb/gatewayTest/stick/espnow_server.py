@@ -309,27 +309,26 @@ class ESPNowRadio:
             self.disableNode(mac)
 
     def send_to_peer(self, mac, message):
-        """Send a message to a specific peer. Returns True on success."""
+        """Send a message to a specific peer. Returns 1 on success, 0 on failure."""
         if self.debug:
             print("Sending to", mac, "Message:", message)
         try:
             result = self.radio.send(mac, message)
             if self.debug:
                 print("Send result:", result)
-            return result
+            return 1 if result else 0
         except Exception as e:
             if self.debug:
                 print("Send error:", e)
-            return False
+            return 0
 
     def send_to_all_peers(self, message):
-        """Send a message to all registered peers. Returns number of successful sends."""
+        """Send a message to all registered peers. Returns the number of successful sends (sum of 1s from send_to_peer)."""
         success_count = 0
         try:
             peers = self.radio.peers_table
             for mac in peers:
-                if self.send_to_peer(mac, message):
-                    success_count += 1
+                success_count += self.send_to_peer(mac, message)
         except Exception as e:
             if self.debug:
                 print("Error sending to all peers:", e)
@@ -390,8 +389,8 @@ if __name__ == "__main__":
                     msg = f"server msg {idx} {send_counter}".encode()
                     # Prepend shared key header for consistency with protocol
                     payload = sensor.shared_key[:16] + msg
-                    print(f"Sending to peer {idx} ({mac.hex()}): {msg.decode()}")
-                    sensor.send_to_peer(mac, payload)
+                    r = sensor.send_to_peer(mac, payload)
+                    print(f"Sending to peer {idx} ({mac.hex()}): {msg.decode()} - Result: {'OK' if r == 1 else 'FAIL'}")
             else:
                 print("No peers registered, skipping send")
             
