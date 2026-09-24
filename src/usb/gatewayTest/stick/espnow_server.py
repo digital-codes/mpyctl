@@ -338,16 +338,27 @@ class ESPNowRadio:
             return 0
 
     def send_to_all_peers(self, message):
-        """Send a message to all registered peers. Returns the number of successful sends (sum of 1s from send_to_peer)."""
-        success_count = 0
+        """Send a message to all registered peers.
+        
+        Returns:
+            Number of successful sends if all succeed
+            Negative value if any sends failed (peer_count - success_count)
+        """
         try:
             peers = self.radio.peers_table
+            peer_count = len(peers)
+            success_count = 0
             for mac in peers:
                 success_count += self.send_to_peer(mac, message)
+            
+            if success_count != peer_count:
+                # Return negative difference to indicate partial failure
+                return success_count - peer_count  # e.g., -1 if 1 peer failed
+            return success_count
         except Exception as e:
             if self.debug:
                 print("Error sending to all peers:", e)
-        return success_count
+            return -1
 
     def get_peer_count(self):
         """Return the number of registered peers."""
