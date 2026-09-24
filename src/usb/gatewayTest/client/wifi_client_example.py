@@ -98,14 +98,18 @@ def connect_to_server():
         print("Failed to connect to server:", e)
         return False
 
+# Peer index for this client (assign manually or from config)
+MY_PEER_INDEX = 0
+
+
 def send_message(message):
-    """Send a message to the server with shared key header."""
+    """Send a message to the server with shared key header and peer index."""
     global sock
     if sock is None:
         return False
-    
+
     try:
-        payload = SHARED_KEY[:16] + message
+        payload = SHARED_KEY[:16] + bytes([MY_PEER_INDEX]) + message.encode()
         sock.send(payload)
         return True
     except Exception as e:

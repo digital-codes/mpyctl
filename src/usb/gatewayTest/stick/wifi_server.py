@@ -420,24 +420,29 @@ class WiFiServer:
         if self.debug:
             print("WiFiServer: Header: %s" % header.hex())
 
-        application_data = data[HEADER_LEN:]
+        # Extract peer_index and message from payload
+        # Format: peer_index(1) + message
+        if len(data) > HEADER_LEN:
+            peer_index = data[HEADER_LEN]
+            message = data[HEADER_LEN + 1:]
+        else:
+            peer_index = 0
+            message = b""
 
         if self.debug:
-            print("WiFiServer: Payload:", application_data)
+            print("WiFiServer: Peer index: %d" % peer_index)
+            print("WiFiServer: Message:", message)
             try:
-                print("WiFiServer: Payload decode:", application_data.decode('utf-8'))
+                print("WiFiServer: Message decode:", message.decode('utf-8'))
             except Exception as e:
-                print("WiFiServer: Payload decode error:", e)
+                print("WiFiServer: Message decode error:", e)
 
-        # If MAC is None, use IP:port as identifier (encoded in 6 bytes)
+        # If MAC is None, use IP as identifier (4 bytes)
         sock, client_mac = self.clients[addr]
         if client_mac is None:
-            # Encode client IP:port as 6-byte identifier
-            # IP is 4 bytes, port is 2 bytes
+            # Encode client IP as 4-byte identifier
             ip_parts = addr[0].split('.')
-            ip_bytes = bytes([int(x) for x in ip_parts])
-            port_bytes = addr[1].to_bytes(2, 'big')
-            client_mac = ip_bytes + port_bytes
+            client_mac = bytes([int(x) for x in ip_parts])
 
         if self.debug:
             print("WiFiServer: Data from %s: %s" % (str(addr), application_data))
