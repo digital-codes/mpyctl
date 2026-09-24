@@ -303,7 +303,7 @@ class WiFiServer:
         if self.gateway:
             self.gateway.unregister_channel(self.channel_id)
 
-    def _poll(self):
+    def _poll(self, t):
         """Poll for new connections and data. Called periodically."""
         if not self.accepting:
             return
