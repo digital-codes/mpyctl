@@ -1,10 +1,83 @@
 # AtomS3U USB Sensor Gateway
 
-Current status: **working baseline**
+Current status: **working baseline** with ESP-NOW and WiFi support.
 
-## Verified
+## Overview
 
-### USB transport
+The AtomS3U USB Sensor Gateway provides two wireless communication options:
+
+1. **ESP-NOW** - Low-power peer-to-peer communication
+2. **WiFi AP** - Access point mode with TCP sockets
+
+Both use channel 3 on the USB interface and share the same message protocol.
+
+---
+
+## Software Structure
+
+```
+common/                     Shared constants between host and stick
+    channel_defs.py        Message types, channel kinds, directions
+
+stick/                     AtomS3U MicroPython, installed on the board
+    boot.py                USB enumeration only
+    usb_channel_server.py  USB transport, framing, channel management
+    button_sensor.py       channel 1, GPIO41 input
+    rgb_sensor.py          channel 2, GPIO35 NeoPixel output
+    espnow_server.py       channel 3, ESP-NOW radio (bi-directional)
+    wifi_server.py         channel 3, WiFi AP server (bi-directional)
+    sensor_test_espnow.py  creates test sensors with ESP-NOW
+    sensor_test_wifi.py    creates test sensors with WiFi
+    config.json            shared key, device id, own MAC
+    private.py             Wi-Fi secrets (see Configuration)
+
+host/                      Linux host applications
+    sensor_tui.py          curses UI (pyusb)
+    wifi_client.py         standalone WiFi client (optional)
+    wifi/                  WiFi client files
+        wifi_client.py     Linux WiFi TCP client
+
+client/                    MicroPython clients for second ESP32
+    espnow_client_example.py
+    wifi_client_example.py
+
+tests/                     Host-side smoke test
+    usb_channel_smoketest.py
+```
+
+---
+
+## Quick Start
+
+### ESP-NOW Mode
+
+1. Copy `stick/` contents to device (see Device Installation)
+2. Start the sensor on the device:
+   ```
+   import sensor_test_espnow
+   sensor_test_espnow.run()
+   ```
+3. Run the TUI:
+   ```
+   python3 host/sensor_tui.py -e
+   ```
+
+### WiFi Mode
+
+1. Copy `stick/` contents to device
+2. Start the sensor on the device:
+   ```
+   import sensor_test_wifi
+   sensor_test_wifi.run()
+   ```
+3. Run the TUI:
+   ```
+   python3 host/sensor_tui.py -w
+   ```
+
+---
+
+## USB Transport
 
 - Composite USB device
   - Interface 0/1: MicroPython CDC REPL
@@ -13,298 +86,245 @@ Current status: **working baseline**
   - channel (u8)
   - message type (u8)
   - payload length (u16 little-endian)
-- Full duplex operation
-- Binary payloads
-- Channel discovery
-- Ping/Pong
-- Dynamic channel registration
-- Runtime debug logging
+- Full duplex operation, binary payloads
+- Channel discovery, Ping/Pong, dynamic registration, debug logging
 
-### Sensors
+---
 
-Verified:
+## Sensors
 
-- GPIO41 button input
-- GPIO35 NeoPixel RGB output
+- **GPIO41 button** - Push button input with debouncing
+- **GPIO35 NeoPixel** - RGB LED output
 
 The Linux TUI successfully receives button events and controls the RGB LED.
 
-### ESP-NOW
+---
 
-Current implementation:
+## ESP-NOW
 
-- Wi-Fi STA is activated before ESP-NOW (required on ESP32).
-- In gateway mode the radio sensor registers USB channel 3. The Wi-Fi
-  channel is always read from `private.py` `ENOW_CHANNEL` and is
-  independent of the USB channel number.
-- On-air message: 16-byte shared key header + application data.
-- USB event payload: 6-byte source MAC + 1-byte RSSI (offset by 256) +
-  application data.
+### How It Works
 
-Testing status (2026-09-23):
+- Wi-Fi STA is activated before ESP-NOW (required on ESP32)
+- Radio sensor registers USB channel 3
+- On-air message: 16-byte shared key header + application data
+- USB event payload: 6-byte source MAC + 1-byte RSSI + application data
 
-- **Both directions work with encryption and multiple peers.**
-  `espnow_client_example.py` runs on a second ESP32 board. Multiple peers
-  are supported via `peers.json` - each peer has its own LMK for encrypted
-  communication.
+### Configuration
 
-#### Configuration
-
-The ESP-NOW server (gateway mode and stand-alone) reads `/config.json`:
+The ESP-NOW server reads `/config.json`:
 
 ```json
 {
   "id":  "<device id>",
-  "ble":  {"key": "<32 hex chars: 16-byte shared key / LMK>"},
+  "ble":  {"key": "<32 hex chars = 16-byte shared key>"},
   "wlan": {"addr": "<own MAC hex>"}
 }
 ```
 
-**Note:** `config.json` is **individual per ESP32 device** (id, keys,
-MAC) and must be created/maintained per device. Provisioning it is
-beyond the scope of this repository — see the
-[mpyctlhost](https://github.com/digital-codes/mpyctlhost) project
-(same GitHub user) for details.
+All ESP-NOW code uses `private.py`:
 
-All ESP-NOW code (server and client) uses `private.py`:
+```python
+ENOW_SERVER = <hex mac>      # Server MAC (client only)
+ENOW_KEY = <hex key>        # Shared key (first 16 bytes = PMK)
+ENOW_CHANNEL = <channel>     # Wi-Fi channel
+```
 
->   ENOW_SERVER = \<hex mac address (no : )\> (client only)
-    ENOW_KEY = \<hex key; first 16 bytes are the PMK and the message header\> (client only)
-    ENOW_CHANNEL = \<Wi-Fi channel\> (all modes)
+**Note:** `private.py` is device-specific and must be created per deployment.
 
-**Note:** `private.py` is kept in `stick/` together with the board code,
-but the **client needs the same file** — copy it to the second ESP32
-along with `client/espnow_client_example.py`. It is not in git
-(gitignored) and must be created per deployment.
+### Running the Client
 
-`espnow_client_example.py` additionally uses `config.json` `ble.key` as
-the LMK for encrypted unicast.
-Encryption only works when every peer is registered with the same LMK:
-the server via `enableNode(mac, lmk)` or `MSG_PEER_ADD` from host, the
-client via `radio.add_peer(SERVER_MAC, LMK, ...)`.
-The host loads `peers.json`, a list of `{"mac": "<hex>", "lmk": "<hex>"}`
-entries, and sends `MSG_PEER_ADD` to the gateway. This file must be
-provided manually — it is device-specific and not kept in git.
+Copy to a second ESP32 and run:
+- `client/espnow_client_example.py`
+- `stick/private.py`
+- `config.json`
 
-To run the client test: copy `client/espnow_client_example.py`,
-`stick/private.py` and `config.json` to a second ESP32 and start it as a
-script (it runs its send loop at import time). It transmits
-`sensor message <n>` to the server every 5 seconds; the messages show up
-on TUI channel 3.
-
-#### Known Issues / Lessons Learned 
-The synchronous callback behavior of submit_xfer() on this MicroPython build is unusual enough 
-that it's worth documenting prominently for future maintenance. 
+The client sends `sensor message <n>` every 5 seconds.
 
 ---
 
-# Software structure
+## WiFi AP Server
 
-```
-common/                 Shared constants between host and stick
-    channel_defs.py        Message types, channel kinds, directions,
-                            control commands
+### How It Works
 
-stick/                  AtomS3U MicroPython, installed on the board
-    boot.py                 USB enumeration only
-    usb_channel_server.py   USB transport, framing, channel management,
-                            control channel, debug support
-    button_sensor.py        channel 1, GPIO41 input
-    rgb_sensor.py           channel 2, GPIO35 NeoPixel output
-    espnow_server.py        channel 3, ESP-NOW radio (bi-directional)
-    sensor_test.py          creates the test sensors
-    manualTest.py           REPL scratch script for manual bring-up
-                            (deletes boot.py from the device at the end!)
-    config.json             shared key / LMK, device id, own MAC
-    private.py              Wi-Fi channel (ENOW_CHANNEL), secrets;
-                            also needed by client/ (see above)
-    peers.json              peer MAC/LMK definitions (loaded by host)
+- Creates Access Point: SSID "MPY", password "xxx", channel 3
+- TCP server on port 8080
+- Only authorized MAC addresses can connect
+- Same 16-byte shared key header protocol as ESP-NOW
 
-host/                   Linux host application
-    sensor_tui.py           curses UI (pyusb)
+### Configuration
 
-client/                 ESP-NOW test client for a second ESP32
-    espnow_client_example.py
+WiFi uses the same `config.json` as ESP-NOW. Additional `private.py` settings:
 
-tests/                  host-side smoke test (stubs the MicroPython
-                        modules; run: python3 tests/usb_channel_smoketest.py)
-    usb_channel_smoketest.py
+```python
+WIFI_SSID = "MPY"
+WIFI_PASSWORD = "xxx"
+WIFI_CHANNEL = 3
+WIFI_SERVER_IP = "192.168.1.1"
+WIFI_PORT = 8080
+WIFI_KEY = <hex key>        # Same as ENOW_KEY for shared key
 ```
 
-## ESP-NOW Peer Management
+### Running the Client (MicroPython)
 
-Peers are defined in `peers.json` in the stick directory. When the host TUI
-starts, it loads this file and sends `MSG_PEER_ADD` messages to the ESP-NOW
-channel to register each peer with the gateway. The payload format is:
+Copy to a second ESP32 and run:
+- `client/wifi_client_example.py`
+- `stick/private.py`
+- `config.json`
 
-- `MSG_PEER_ADD`: 6-byte MAC + optional 16-byte LMK
-- `MSG_PEER_DEL`: 6-byte MAC (removes peer from gateway)
+### Running the Client (Linux)
 
-Sensor modules never import `boot.py`.
+```bash
+python3 host/wifi_client.py                    # Interactive mode
+python3 host/wifi_client.py -m "hello"         # Single message
+python3 host/wifi_client.py --server-ip 192.168.1.1 --port 8080
+```
 
-They obtain the gateway via:
+---
+
+## Peer Management
+
+Both ESP-NOW and WiFi use the same peer management mechanism:
+
+- Peers defined in `peers.json`: `[{"mac": "<hex>", "lmk": "<hex>"}]`
+- Host loads this file and sends `MSG_PEER_ADD` / `MSG_PEER_DEL` to gateway
+- Only authorized MAC addresses can connect (WiFi) or communicate (ESP-NOW)
+
+---
+
+## Linux TUI
+
+Run with: `python3 host/sensor_tui.py [options]`
+
+Options:
+- `--serial <serial>` - Select specific device
+- `-e, --espnow` - Use ESP-NOW mode
+- `-w, --wifi` - Use WiFi mode
+
+Keys:
+- `p` - Ping
+- `c` - Read channel list
+- `r/g/b/w/y/0` - RGB LED
+- `d` - Toggle device debug
+- `s` - Request gateway status
+- `x` - Clear debug log / save to file
+- `m` - Send message to peer
+- `q` - Quit
+
+---
+
+## Device Installation
+
+Copy to the board:
+
+**Required:**
+- `boot.py`
+- `usb_channel_server.py`
+- `button_sensor.py`
+- `rgb_sensor.py`
+- `channel_defs.py` (from common/)
+
+**Choose one:**
+- `espnow_server.py` + `sensor_test_espnow.py` (ESP-NOW mode)
+- `wifi_server.py` + `sensor_test_wifi.py` (WiFi mode)
+
+**Add (device-specific):**
+- `config.json`
+- `private.py`
+
+Power-cycle after installation.
+
+---
+
+## REPL
 
 ```python
 import usb_channel_server
-
-gateway = usb_channel_server.get_gateway()
-```
-
----
-
-# Device installation
-
-Copy the contents of `stick/` and `common/`:
-
-From `stick/`:
-- boot.py
-- usb_channel_server.py
-- button_sensor.py
-- rgb_sensor.py
-- espnow_server.py
-- sensor_test.py
-
-From `common/`:
-- channel_defs.py
-
-to the board. Add `config.json` and `private.py` (see the ESP-NOW
-configuration section) if the ESP-NOW sensor is used; `espnow_server.py`
-refuses to start without `config.json` and imports `private.py` for the
-Wi-Fi channel.
-
-Power-cycle afterwards.
-
----
-
-# REPL
-
-USB transport only:
-
-```python
-import usb_channel_server
-
 gateway = usb_channel_server.get_gateway()
 gateway.stats()
 ```
 
-Start the test sensors:
-
+Start sensors:
 ```python
-import sensor_test
-sensor_test.run()
+import sensor_test_espnow  # or sensor_test_wifi
+sensor_test_espnow.run()
 ```
 
 Stop:
-
 ```python
-sensor_test.stop()
+sensor_test_espnow.stop()
 ```
 
 ---
 
-# Linux TUI
+## Smoke Test
 
-Run `host/sensor_tui.py` (needs pyusb, curses):
-
-```
-python3 host/sensor_tui.py [--serial <serial>]
-```
-
-Current keys:
-
-- p : Ping
-- c : Read channel list
-- r/g/b/w/y/0 : RGB LED
-- d : Toggle device debug
-- s : Refresh gateway status (RX/TX counters update)
-- c : Refresh channel list (only needed when channels change dynamically)
-- x : Clear debug log
-- m : Send ESP-NOW message (prompts for peer and message)
-- q : Quit
-
----
-
-## Prerequisites
-
-The default boot.py only instantiates the gateway server. The TUI cooperates with sensor_test.py
-which must be started manually (unless you use a custom boot.py)
-
-Enter the repl via *mpremote* and start the test
-
-``` 
-import sensor_test
-sensor_test.run()
-```
-
-exit repl with Ctrl-X  (not Ctrl-D) => test keeps running
-
-start `host/sensor_tui.py`
-
-
-
-
-# Host smoke test
-
-`tests/usb_channel_smoketest.py` runs the real `stick/` transport and
-sensors plus `host/sensor_tui.py` parsing against a stubbed USB device
-(no hardware needed):
-
-```
+```bash
 python3 tests/usb_channel_smoketest.py
 ```
 
-It covers framing, ping, channel discovery, status, the RGB round trip,
-button events and the ESP-NOW receive path, and verifies identical
-frames with synchronous and asynchronous USB IN completion.
+Tests framing, ping, channel list, status, RGB round trip, button events, and wireless receive path.
 
 ---
 
-# Debugging
-
-Enable:
+## Debugging
 
 ```python
-gateway.set_debug(True)
-```
-
-Disable:
-
-```python
-gateway.set_debug(False)
-```
-
-Dump:
-
-```python
-gateway.dump_debug()
-```
-
-Clear:
-
-```python
-gateway.clear_debug()
+gateway.set_debug(True)   # Enable
+gateway.set_debug(False)  # Disable
+gateway.dump_debug()      # Print log
+gateway.clear_debug()     # Clear
 ```
 
 ---
 
-# Important implementation detail
+## Important Implementation Detail
 
-On the current ESP32-S3 MicroPython build,
-`USBDevice.submit_xfer()` may complete synchronously.
+On ESP32-S3 MicroPython (v1.27.0), `USBDevice.submit_xfer()` may complete **synchronously**.
 
-The USB channel server therefore marks an IN transfer as busy **before**
-calling `submit_xfer()` to avoid recursive submission of the same frame.
-
-This behavior was required for reliable transmission of asynchronous
-sensor events.
+The USB channel server marks an IN transfer as busy **before** calling `submit_xfer()` to avoid recursive submission.
 
 ---
 
-# Next steps
+## Configuration Files
 
-- Verify ESP-NOW server to client communication (in progress).
-- Add sensor base class.
-- Add I²C sensor channels.
-- Add SPI sensor channels.
-- Add channel hot-plug notifications.
-- Implement application protocol on top of transport.
+### config.json (per device)
+```json
+{
+  "id": "device-001",
+  "ble": {"key": "00112233445566778899aabbccddeeff"},
+  "wlan": {"addr": "aabbccddeeff"}
+}
+```
+
+### private.py (per device)
+```python
+# ESP-NOW
+ENOW_SERVER = "aabbccddeeff"
+ENOW_KEY = "00112233445566778899aabbccddeeff"
+ENOW_CHANNEL = 3
+
+# WiFi
+WIFI_SSID = "MPY"
+WIFI_PASSWORD = "xxx"
+WIFI_CHANNEL = 3
+WIFI_SERVER_IP = "192.168.1.1"
+WIFI_PORT = 8080
+WIFI_KEY = "00112233445566778899aabbccddeeff"
+```
+
+### peers.json (optional, for multiple clients)
+```json
+[
+  {"mac": "aabbccddeeff0011", "lmk": "00112233445566778899aabbccddeeff"}
+]
+```
+
+---
+
+## Next Steps
+
+- Add sensor base class
+- Add I²C sensor channels
+- Add SPI sensor channels
+- Add channel hot-plug notifications
+- Implement application protocol on top of transport
