@@ -136,7 +136,7 @@ class ESPNowRadio:
                 channel_id,
                 self.KIND,
                 DIR_BIDI,
-                250,
+                self._radio_datalen,
                 name,
                 self._handle_outbound,
             )
@@ -385,6 +385,9 @@ class ESPNowRadio:
                 "address": self.address,
                 "shared_key": self.shared_key,
                 "wifi_channel": self.wifi_channel,
+                "radio_datalen": self._radio_datalen,
+                "radio_crypt_peers": self._radio_crypt_peers,
+                "radio_total_peers": self._radio_total_peers
             },
             "received": self.received,
             "rejected": self.rejected,
