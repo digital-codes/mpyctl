@@ -106,6 +106,11 @@ class WiFiServer:
         self.poller = select.poll()
         self.poll_timeout = 250  # ms
 
+        # Timer to call _poll
+        import machine
+        self.timer = None
+        self.timer_id = 3
+
         # Get AP settings
         global AP_SSID, AP_PASSWORD, AP_CHANNEL
         self.ssid = AP_SSID
@@ -201,6 +206,11 @@ class WiFiServer:
             import select
             self.poller.register(self.server_socket, select.POLLIN)
 
+            # Start timer to call _poll
+            import machine
+            self.timer = machine.Timer(self.timer_id)
+            self.timer.init(period=100, mode=machine.Timer.PERIODIC, callback=self._timer_callback)
+
             print("WiFiServer: TCP server listening on %s:%d" % (self.server_ip, AP_LISTEN_PORT))
         except Exception as e:
             print("WiFiServer: ERROR - failed to start TCP server:", e)
@@ -223,6 +233,11 @@ class WiFiServer:
             except Exception:
                 pass
             self.server_socket = None
+
+        # Stop timer
+        if self.timer:
+            self.timer.deinit()
+            self.timer = None
 
     def _close_client(self, addr):
         """Close a specific client connection."""
@@ -286,6 +301,10 @@ class WiFiServer:
         
         if self.gateway:
             self.gateway.unregister_channel(self.channel_id)
+
+    def _timer_callback(self, t):
+        """Timer callback to poll for connections and data."""
+        micropython.schedule(self._poll, None)
 
     def _poll(self, t=None):
         """Poll for new connections and data using select.poll()."""
