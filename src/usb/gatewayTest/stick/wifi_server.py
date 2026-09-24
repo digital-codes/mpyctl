@@ -335,7 +335,7 @@ class WiFiServer:
         """Check if there's data from a client."""
         if addr not in self.clients:
             return
-        
+
         sock, client_mac = self.clients[addr]
         try:
             sock.settimeout(0)  # Non-blocking for MicroPython
@@ -344,12 +344,14 @@ class WiFiServer:
                 self._handle_client_data(addr, data)
             else:
                 # No data - connection closed
-                print("WiFiServer: Connection closed by client %s" % str(addr))
+                if self.debug:
+                    print("WiFiServer: Connection closed by client %s" % str(addr))
                 self._close_client(addr)
         except OSError:
             pass  # No data available
         except Exception as e:
-            print("WiFiServer: ERROR - reading from %s: %s" % (str(addr), e))
+            if self.debug:
+                print("WiFiServer: ERROR - reading from %s: %s" % (str(addr), e))
             self.rx_errors += 1
             self._close_client(addr)
 
@@ -359,7 +361,11 @@ class WiFiServer:
         Expected format: 16-byte shared key header + application data
         """
         if self.debug:
-            print("WiFiServer: Received %d bytes from %s" % (len(data), str(addr)))
+            print("WiFiServer: ============================================")
+            print("WiFiServer: RECEIVED from %s" % str(addr))
+            print("WiFiServer: Raw bytes:", data)
+            print("WiFiServer: Raw hex:", data.hex())
+            print("WiFiServer: Length:", len(data))
 
         if len(data) < HEADER_LEN:
             if self.debug:
@@ -368,21 +374,32 @@ class WiFiServer:
             return
 
         # Verify shared key header
-        if data[:HEADER_LEN] != self.shared_key:
+        header = data[:HEADER_LEN]
+        if header != self.shared_key:
             if self.debug:
                 print("WiFiServer: ERROR - invalid shared key from %s" % str(addr))
                 print("WiFiServer: Expected: %s" % self.shared_key.hex())
-                print("WiFiServer: Got:      %s" % data[:HEADER_LEN].hex())
+                print("WiFiServer: Got:      %s" % header.hex())
             self.rejected += 1
             return
-        
+
+        if self.debug:
+            print("WiFiServer: Header: %s" % header.hex())
+
         application_data = data[HEADER_LEN:]
-        
+
+        if self.debug:
+            print("WiFiServer: Payload:", application_data)
+            try:
+                print("WiFiServer: Payload decode:", application_data.decode('utf-8'))
+            except Exception as e:
+                print("WiFiServer: Payload decode error:", e)
+
         # If MAC is None, use a placeholder
         sock, client_mac = self.clients[addr]
         if client_mac is None:
             client_mac = bytes([0] * 6)  # Placeholder
-        
+
         if self.debug:
             print("WiFiServer: Data from %s: %s" % (str(addr), application_data))
         
@@ -479,7 +496,13 @@ class WiFiServer:
         if addr not in self.clients:
             print("WiFiServer: ERROR - client not connected: %s" % str(addr))
             return 0
-        
+
+        if self.debug:
+            print("WiFiServer: Sending to %s:" % str(addr))
+            print("  Raw bytes:", message)
+            print("  Raw hex:", message.hex())
+            print("  Length:", len(message))
+
         try:
             sock, mac = self.clients[addr]
             sent = sock.send(message)
