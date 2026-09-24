@@ -427,7 +427,8 @@ class TUI:
                     f.write(f"Status: RX={self.gateway_status['rx_frames']} TX={self.gateway_status['tx_frames']} "
                             f"parse={self.gateway_status['parse_errors']} usb={self.gateway_status['usb_errors']}\n")
                 if self.esp_messages:
-                    f.write("ESP-NOW messages:\n")
+                    mode = "WiFi" if self.use_wifi else "ESP-NOW"
+                    f.write(f"{mode} messages:\n")
                     for msg in self.esp_messages:
                         f.write(f"  {msg}\n")
                 f.write("\n")
@@ -577,7 +578,8 @@ class TUI:
 
         row = 4
         if self.esp_messages:
-            line(row, "ESP-NOW: " + self.esp_messages[-1])
+            mode = "WiFi" if self.use_wifi else "ESP-NOW"
+            line(row, "%s: %s" % (mode, self.esp_messages[-1]))
             row += 1
 
         if self.input_mode:
