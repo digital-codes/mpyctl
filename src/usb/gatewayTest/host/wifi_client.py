@@ -35,24 +35,6 @@ except ImportError:
 DEFAULT_PORT = 8080
 
 
-def get_interface_for_ip(target_ip):
-    """Auto-detect interface that can reach target IP."""
-    import subprocess
-    import re
-    try:
-        result = subprocess.run(
-            ["ip", "route", "get", target_ip],
-            capture_output=True, text=True, timeout=5
-        )
-        output = result.stdout
-        match = re.search(r'dev\s+(\S+)', output)
-        if match:
-            return match.group(1)
-    except Exception:
-        pass
-    return None
-
-
 def get_ifconfig(interface):
     """Get IP config for interface using ifconfig."""
     import subprocess
@@ -196,26 +178,23 @@ def main():
     port = args.port or config.get('port', DEFAULT_PORT)
     shared_key = config.get('shared_key', None)
 
-    # Auto-detect server IP from interface if not provided
-    server_ip = args.server_ip
-    if not server_ip:
-        # Default to gateway .1 of current subnet
-        interface = args.interface
-        if not interface:
-            interface = get_interface_for_ip("192.168.4.1")
-        if interface:
-            local_ip, _ = get_ifconfig(interface)
-            if local_ip:
-                parts = [int(x) for x in local_ip.split('.')]
-                server_ip = f"{parts[0]}.{parts[1]}.{parts[2]}.1"
-                print(f"Auto-detected: interface={interface}, local={local_ip}, server={server_ip}")
-
-    if not server_ip:
-        print("Error: Could not auto-detect server IP. Use --server-ip option.")
+    # Get server IP from interface
+    interface = args.interface
+    if not interface:
+        print("Error: -i/--interface required")
         sys.exit(1)
 
+    local_ip, _ = get_ifconfig(interface)
+    if not local_ip:
+        print(f"Error: Could not get IP for interface {interface}")
+        sys.exit(1)
+
+    # Derive gateway from local IP (.1 of subnet)
+    parts = [int(x) for x in local_ip.split('.')]
+    server_ip = f"{parts[0]}.{parts[1]}.{parts[2]}.1"
+
     print(f"WiFi Client")
-    print(f"Server: {server_ip}:{port}")
+    print(f"Interface: {interface}, Local: {local_ip}, Server: {server_ip}:{port}")
     
     # Create client
     try:
