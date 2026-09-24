@@ -517,14 +517,24 @@ class TUI:
 
         if channel == CHANNEL_ESPNOW and msg_type == MSG_EVENT:
             if len(payload) >= 6:
-                mac = payload[:6].hex()
-
                 if self.use_wifi:
-                    # WiFi: payload = MAC(6) + data (no RSSI)
-                    data = payload[6:]
+                    # WiFi: payload = IP(4) + peer_index(1) + message
+                    mac = payload[:4].hex()
+                    if len(payload) > 4:
+                        data = payload[5:]  # Skip peer_index
+                    else:
+                        data = b""
                     rssi_str = ""
+
+                    # Show IP instead of MAC for WiFi
+                    try:
+                        ip_bytes = bytes.fromhex(mac[:8])
+                        peer_label = f"{ip_bytes[0]}.{ip_bytes[1]}.{ip_bytes[2]}.{ip_bytes[3]}"
+                    except Exception:
+                        peer_label = mac
                 else:
                     # ESP-NOW: payload = MAC(6) + RSSI(1) + data
+                    mac = payload[:6].hex()
                     if len(payload) >= 7:
                         raw_rssi = payload[6]
                         rssi = raw_rssi - 256 if raw_rssi >= 128 else raw_rssi
@@ -534,27 +544,17 @@ class TUI:
                         rssi_str = ""
                         data = b""
 
+                    # Find matching peer index
+                    peer_label = mac
+                    for idx, peer in enumerate(self.peers):
+                        if peer.get("mac", "").lower() == mac.lower():
+                            peer_label = f"Peer {idx}"
+                            break
+
                 try:
                     display = data.decode("utf-8")
                 except UnicodeDecodeError:
                     display = data.hex(" ")
-
-                # Find matching peer index
-                peer_label = mac
-                for idx, peer in enumerate(self.peers):
-                    if peer.get("mac", "").lower() == mac.lower():
-                        peer_label = f"Peer {idx}"
-                        break
-
-                # For WiFi, if no peer matched, show IP from the identifier
-                if self.use_wifi and peer_label == mac:
-                    # Identifier is IP(4 bytes = 8 hex chars)
-                    if len(mac) >= 8:
-                        try:
-                            ip_bytes = bytes.fromhex(mac[:8])
-                            peer_label = f"{ip_bytes[0]}.{ip_bytes[1]}.{ip_bytes[2]}.{ip_bytes[3]}"
-                        except Exception:
-                            pass  # Keep showing MAC if parse fails
 
                 self.esp_messages.append(
                     "%s %s%s: %s"
@@ -608,8 +608,13 @@ class TUI:
 
         if self.input_mode:
             if self.peers and 0 <= self.input_peer < len(self.peers):
-                selected_mac = self.peers[self.input_peer].get("mac", "unknown")
-                line(row, "To peer %d (%s): %s" % (self.input_peer, selected_mac, self.input_text))
+                if self.use_wifi:
+                    # For WiFi, show IP instead of MAC
+                    peer = self.peers[self.input_peer]
+                    peer_label = peer.get("ip", peer.get("mac", "unknown"))
+                else:
+                    peer_label = self.peers[self.input_peer].get("mac", "unknown")
+                line(row, "To peer %d (%s): %s" % (self.input_peer, peer_label, self.input_text))
             else:
                 line(row, "Peer [0-%d]: %s" % (len(self.peers) - 1 if self.peers else 0, self.input_text))
             row += 1
