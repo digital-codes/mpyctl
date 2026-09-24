@@ -104,7 +104,7 @@ class WiFiServer:
         # Timer for polling
         self.timer = None
         self.timer_id = 3
-        self.poll_ms = 100
+        self.poll_ms = 250
 
         # Get AP settings
         global AP_SSID, AP_PASSWORD, AP_CHANNEL
