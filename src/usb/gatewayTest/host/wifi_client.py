@@ -92,7 +92,10 @@ class WiFiClient:
         
         if shared_key is None:
             raise ValueError("No shared key provided")
-        
+
+        # Convert to bytes if needed
+        if isinstance(shared_key, str):
+            shared_key = bytes.fromhex(shared_key[:32])
         self.shared_key = shared_key
     
     def connect(self):
@@ -169,7 +172,7 @@ def main():
     parser.add_argument("--port", type=int, default=None, help="Server port")
     parser.add_argument("--message", "-m", help="Send a single message and exit")
     parser.add_argument("--count", "-c", type=int, default=5, help="Number of messages to send (default: 5)")
-    parser.add_argument("--interval", "-i", type=int, default=5, help="Interval between messages in seconds (default: 5)")
+    parser.add_argument("--interval", type=int, default=5, help="Interval between messages in seconds (default: 5)")
     args = parser.parse_args()
 
     # Load configuration
