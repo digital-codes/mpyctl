@@ -160,6 +160,10 @@ espnow_mod = types.ModuleType("espnow")
 
 
 class _ESPNow:
+    MAX_DATA_LEN = 250
+    MAX_ENCRYPT_PEER_NUM = 20
+    MAX_TOTAL_PEER_NUM = 20
+    
     def __init__(self):
         self.peers_table = {}
         self.rx = []
@@ -198,6 +202,9 @@ class _ESPNow:
         return {}
 
 
+espnow_mod.MAX_DATA_LEN = 250
+espnow_mod.MAX_ENCRYPT_PEER_NUM = 20
+espnow_mod.MAX_TOTAL_PEER_NUM = 20
 espnow_mod.ESPNow = _ESPNow
 sys.modules["espnow"] = espnow_mod
 

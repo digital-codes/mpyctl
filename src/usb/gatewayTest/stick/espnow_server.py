@@ -153,15 +153,19 @@ class ESPNowRadio:
         self.security = security
 
     def enableNode(self, mac, lmk=None):
-        """Enable a node with the given MAC address and optional LMK. Use LMK from individual device config BLE key.
-        so server send as receives with LMK as node BLE key. Silently succeeds if peer already exists.
+        """Enable a node with the given MAC address and optional LMK.
+        
+        Returns:
+            1 on success
+            0 if peer already exists (not an error)
+            negative on failure
         """
         try:
             existing = self.radio.get_peer(mac)
             if existing is not None:
                 if self.debug:
                     print("Peer already exists:", mac.hex())
-                return
+                return 0  # Already exists, not an error
         except Exception:
             pass
         try:
@@ -171,14 +175,30 @@ class ESPNowRadio:
                 self.radio.add_peer(mac, channel=self.wifi_channel)
             if self.debug:
                 print("Enabled peer:", mac, "LMK:", lmk)
+            return 1
         except OSError as e:
             if self.debug:
                 print("Failed to enable peer:", mac.hex(), "Error:", e)
+            return -1
 
 
     def disableNode(self, mac):
-        """Remove a previously enabled peer. Encrypted traffic from it is dropped."""
-        self.radio.del_peer(mac)
+        """Remove a previously enabled peer. Encrypted traffic from it is dropped.
+        
+        Returns:
+            1 on success
+            0 if peer didn't exist
+            negative on failure
+        """
+        try:
+            self.radio.del_peer(mac)
+            if self.debug:
+                print("Disabled peer:", mac.hex())
+            return 1
+        except Exception as e:
+            if self.debug:
+                print("Failed to disable peer:", mac.hex(), "Error:", e)
+            return -1
         
 
     def close(self):
@@ -308,8 +328,8 @@ class ESPNowRadio:
             if self.debug:
                 print(f"Outbound: adding peer {mac.hex()} with LMK: {lmk.hex() if lmk else 'None'}")
 
-            self.enableNode(mac, lmk)
-            return 1
+            result = self.enableNode(mac, lmk)
+            return result  # 1=success, 0=already exists, -1=failed
 
         elif msg_type == MSG_PEER_DEL:
             if len(payload) < 6:
@@ -322,8 +342,8 @@ class ESPNowRadio:
             if self.debug:
                 print(f"Outbound: removing peer {mac.hex()}")
 
-            self.disableNode(mac)
-            return 1
+            result = self.disableNode(mac)
+            return result  # 1=success, 0=didn't exist, -1=failed
         
         return 0  # Unknown msg_type
 
