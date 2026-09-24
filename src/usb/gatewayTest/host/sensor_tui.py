@@ -546,6 +546,17 @@ class TUI:
                         peer_label = f"Peer {idx}"
                         break
 
+                # For WiFi, if no peer matched, show IP:port from the identifier
+                if self.use_wifi and peer_label == mac:
+                    # Identifier is IP(4) + port(2)
+                    if len(mac) >= 12:  # 6 bytes = 12 hex chars
+                        try:
+                            ip_bytes = bytes.fromhex(mac[:8])
+                            port = int(mac[8:12], 16)
+                            peer_label = f"{ip_bytes[0]}.{ip_bytes[1]}.{ip_bytes[2]}.{ip_bytes[3]}:{port}"
+                        except Exception:
+                            pass  # Keep showing MAC if parse fails
+
                 self.esp_messages.append(
                     "%s %s%s: %s"
                     % (
