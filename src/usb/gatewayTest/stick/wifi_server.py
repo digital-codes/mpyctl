@@ -445,11 +445,11 @@ class WiFiServer:
             client_mac = bytes([int(x) for x in ip_parts])
 
         if self.debug:
-            print("WiFiServer: Data from %s: %s" % (str(addr), application_data))
+            print("WiFiServer: Data from %s: %s" % (str(addr), message))
         
         # Forward to USB gateway
         if self.gateway:
-            payload = client_mac + application_data
+            payload = client_mac + message
             if self.gateway.send(
                 self.channel_id,
                 MSG_EVENT,

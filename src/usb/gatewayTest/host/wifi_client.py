@@ -122,15 +122,15 @@ class WiFiClient:
             self.socket = None
         self.connected = False
     
-    def send_message(self, message):
-        """Send a message with shared key header."""
+    def send_message(self, message, peer_index=0):
+        """Send a message with shared key header and peer index."""
         if not self.connected or not self.socket:
             return False
-        
+
         try:
             if isinstance(message, str):
                 message = message.encode()
-            payload = self.shared_key + message
+            payload = self.shared_key + bytes([peer_index]) + message
             self.socket.send(payload)
             return True
         except Exception as e:
