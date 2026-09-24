@@ -410,10 +410,9 @@ class WiFiServer:
         # Verify shared key header
         header = data[:HEADER_LEN]
         if header != self.shared_key:
-            if self.debug:
-                print("WiFiServer: ERROR - invalid shared key from %s" % str(addr))
-                print("WiFiServer: Expected: %s" % self.shared_key.hex())
-                print("WiFiServer: Got:      %s" % header.hex())
+            print("WiFiServer: ERROR - invalid shared key from %s" % str(addr))
+            print("WiFiServer: Expected: %s" % self.shared_key.hex())
+            print("WiFiServer: Got:      %s" % header.hex())
             self.rejected += 1
             return
 

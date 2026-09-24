@@ -97,6 +97,7 @@ class WiFiClient:
         if isinstance(shared_key, str):
             shared_key = bytes.fromhex(shared_key[:32])
         self.shared_key = shared_key
+        print(f"DEBUG: shared_key = {self.shared_key.hex()}")
     
     def connect(self):
         """Connect to the WiFi server."""
