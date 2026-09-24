@@ -251,8 +251,9 @@ class WiFiServer:
                 pass
             del self.clients[addr]
             self.disconnected += 1
-            print("WiFiServer: Client disconnected: %s (mac: %s)" % 
-                  (str(addr), mac.hex() if mac else "unknown"))
+            if self.debug:
+                print("WiFiServer: Client disconnected: %s (mac: %s)" %
+                      (str(addr), mac.hex() if mac else "unknown"))
 
     def enableNode(self, mac, lmk=None):
         """Authorize a client MAC address to connect.
@@ -323,8 +324,9 @@ class WiFiServer:
 
     def _handle_new_connection(self, sock, addr):
         """Handle a new TCP connection."""
-        print("WiFiServer: New connection from %s" % str(addr))
-        
+        if self.debug:
+            print("WiFiServer: New connection from %s" % str(addr))
+
         # Accept all connections initially, verify MAC on first data
         self.clients[addr] = (sock, None)
         self.connected += 1
@@ -353,21 +355,24 @@ class WiFiServer:
 
     def _handle_client_data(self, addr, data):
         """Process data received from a client.
-        
+
         Expected format: 16-byte shared key header + application data
         """
-        print("WiFiServer: Received %d bytes from %s" % (len(data), str(addr)))
-        
+        if self.debug:
+            print("WiFiServer: Received %d bytes from %s" % (len(data), str(addr)))
+
         if len(data) < HEADER_LEN:
-            print("WiFiServer: ERROR - short data: %d bytes" % len(data))
+            if self.debug:
+                print("WiFiServer: ERROR - short data: %d bytes" % len(data))
             self.rejected += 1
             return
-        
+
         # Verify shared key header
         if data[:HEADER_LEN] != self.shared_key:
-            print("WiFiServer: ERROR - invalid shared key from %s" % str(addr))
-            print("WiFiServer: Expected: %s" % self.shared_key.hex())
-            print("WiFiServer: Got:      %s" % data[:HEADER_LEN].hex())
+            if self.debug:
+                print("WiFiServer: ERROR - invalid shared key from %s" % str(addr))
+                print("WiFiServer: Expected: %s" % self.shared_key.hex())
+                print("WiFiServer: Got:      %s" % data[:HEADER_LEN].hex())
             self.rejected += 1
             return
         
@@ -378,7 +383,8 @@ class WiFiServer:
         if client_mac is None:
             client_mac = bytes([0] * 6)  # Placeholder
         
-        print("WiFiServer: Data from %s: %s" % (str(addr), application_data))
+        if self.debug:
+            print("WiFiServer: Data from %s: %s" % (str(addr), application_data))
         
         # Forward to USB gateway
         if self.gateway:
@@ -479,11 +485,13 @@ class WiFiServer:
             sent = sock.send(message)
             if sent == len(message):
                 self.sent += 1
-                print("WiFiServer: Sent %d bytes to %s" % (sent, str(addr)))
+                if self.debug:
+                    print("WiFiServer: Sent %d bytes to %s" % (sent, str(addr)))
                 return 1
             else:
-                print("WiFiServer: ERROR - partial send to %s: %d/%d" % 
-                      (str(addr), sent, len(message)))
+                if self.debug:
+                    print("WiFiServer: ERROR - partial send to %s: %d/%d" %
+                          (str(addr), sent, len(message)))
                 self.tx_errors += 1
                 return 0
         except Exception as e:
