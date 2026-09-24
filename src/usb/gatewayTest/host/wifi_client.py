@@ -134,9 +134,9 @@ class WiFiClient:
             if len(data) >= 16 and data[:16] == self.shared_key:
                 application_data = data[16:]
                 self.received_count += 1
-                return application_data.decode()
+                return application_data.decode('utf-8', errors='replace')
             else:
-                return data.decode()
+                return data.decode('utf-8', errors='replace')
         except socket.timeout:
             return None
         except Exception as e:

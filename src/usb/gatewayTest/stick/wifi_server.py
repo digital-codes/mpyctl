@@ -160,7 +160,7 @@ class WiFiServer:
         # Configure AP with SSID, password, and channel
         print("WiFiServer: Configuring AP with ssid='%s', password='%s', channel=%d" % 
               (self.ssid, self.password, self.wifi_channel))
-        self.ap.config(essid=self.ssid, password=self.password, channel=self.wifi_channel)
+        self.ap.config(essid=self.ssid, password=self.password, channel=self.wifi_channel, authmode=3)
         
         # Activate AP
         self.ap.active(True)
