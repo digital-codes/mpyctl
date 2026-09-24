@@ -459,6 +459,7 @@ class TUI:
         payload = bytes([peer_index]) + message.encode()
         try:
             self.gateway.send(CHANNEL_ESPNOW, MSG_COMMAND, payload)
+            self.last_action = "sent to peer %d: %s" % (peer_index, message[:20])
             return True
         except Exception as e:
             self.last_error = f"Send failed: {e}"

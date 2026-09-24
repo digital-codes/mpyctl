@@ -458,7 +458,11 @@ class USBChannelServer:
             return
 
         try:
-            handler(msg_type, payload)
+            result = handler(msg_type, payload)
+            # Check handler return value for error status
+            # 0 or negative = failure, positive = success count
+            if result is not None and result < 0:
+                self.send_error(channel_id, 6, "handler failed: %d" % result)
         except Exception as exc:
             self.send_error(channel_id, 5, repr(exc))
 

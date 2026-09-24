@@ -50,7 +50,12 @@ class RGBOutputSensor:
         self.gateway.unregister_channel(self.channel_id)
 
     def _handle(self, msg_type, payload):
-        """Channel handler: apply a 3-byte COMMAND and respond with the color."""
+        """Channel handler: apply a 3-byte COMMAND and respond with the color.
+        
+        Returns:
+            1 on success
+            negative on error
+        """
         if msg_type != MSG_COMMAND:
             raise ValueError("RGB channel accepts COMMAND only")
         if len(payload) != 3:
@@ -64,6 +69,7 @@ class RGBOutputSensor:
             MSG_RESPONSE,
             bytes(self.rgb),
         )
+        return 1
 
     def _write(self):
         """Push the current color to the pixel hardware."""

@@ -257,21 +257,31 @@ class ESPNowRadio:
         MSG_COMMAND payload: peer_index:u8 + message:string
         MSG_PEER_ADD payload: mac:6-bytes + lmk:16-bytes (optional)
         MSG_PEER_DEL payload: mac:6-bytes
+        
+        Returns:
+            1 on success
+            0 if no peers or general failure
+            negative on specific errors
         """
         if msg_type == MSG_COMMAND:
             if len(payload) < 1:
                 if self.debug:
                     print("Outbound: no peer index specified")
-                return
+                return -1  # No peer index
 
             peer_index = payload[0]
             message = payload[1:].decode("utf-8", "replace")
 
             peer_macs = self.get_peer_macs()
+            if not peer_macs:
+                if self.debug:
+                    print("Outbound: no peers registered")
+                return -2  # No peers
+            
             if peer_index >= len(peer_macs):
                 if self.debug:
                     print(f"Outbound: invalid peer index {peer_index} (max {len(peer_macs)-1})")
-                return
+                return -3  # Invalid peer index
 
             mac = peer_macs[peer_index]
             full_payload = self.shared_key[:16] + message.encode()
@@ -279,13 +289,14 @@ class ESPNowRadio:
             if self.debug:
                 print(f"Outbound to peer {peer_index} ({mac.hex()}): {message}")
 
-            self.send_to_peer(mac, full_payload)
+            result = self.send_to_peer(mac, full_payload)
+            return result  # 1 for success, 0 for failure
 
         elif msg_type == MSG_PEER_ADD:
             if len(payload) < 6:
                 if self.debug:
                     print("Outbound: peer_add requires at least 6 bytes (MAC)")
-                return
+                return -4  # Invalid MAC length
 
             mac = bytes(payload[:6])
             lmk = bytes(payload[6:22]) if len(payload) >= 22 else None
@@ -294,12 +305,13 @@ class ESPNowRadio:
                 print(f"Outbound: adding peer {mac.hex()} with LMK: {lmk.hex() if lmk else 'None'}")
 
             self.enableNode(mac, lmk)
+            return 1
 
         elif msg_type == MSG_PEER_DEL:
             if len(payload) < 6:
                 if self.debug:
                     print("Outbound: peer_del requires 6 bytes (MAC)")
-                return
+                return -4  # Invalid MAC length
 
             mac = bytes(payload[:6])
 
@@ -307,6 +319,9 @@ class ESPNowRadio:
                 print(f"Outbound: removing peer {mac.hex()}")
 
             self.disableNode(mac)
+            return 1
+        
+        return 0  # Unknown msg_type
 
     def send_to_peer(self, mac, message):
         """Send a message to a specific peer. Returns 1 on success, 0 on failure."""

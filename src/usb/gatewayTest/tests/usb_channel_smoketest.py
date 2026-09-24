@@ -190,6 +190,10 @@ class _ESPNow:
             return self.rx.pop(0)
         return (None, None)
 
+    def send(self, mac, message):
+        """Mock send - returns True for success."""
+        return True
+
     def stats(self):
         return {}
 
