@@ -36,11 +36,21 @@ import usb_channel_server as ucs
 import time
 from channel_defs import KIND_BIDI, DIR_BIDI, MSG_EVENT, MSG_COMMAND, MSG_PEER_ADD, MSG_PEER_DEL, CHANNEL_WIFI
 
-# WiFi AP configuration
-AP_SSID = "MPY"
-AP_PASSWORD = "xxx"
-AP_CHANNEL = 3
+# WiFi AP configuration - read from private.py with defaults
+try:
+    import private as pr
+    AP_SSID = getattr(pr, 'WIFI_SSID', 'MPY')
+    AP_PASSWORD = getattr(pr, 'WIFI_PASSWORD', 'xxx')
+    AP_CHANNEL = getattr(pr, 'WIFI_CHANNEL', 3)
+    AP_IP = getattr(pr, 'WIFI_SERVER_IP', '192.168.1.1')
+except Exception:
+    AP_SSID = "MPY"
+    AP_PASSWORD = "xxx"
+    AP_CHANNEL = 3
+    AP_IP = "192.168.1.1"
+
 AP_LISTEN_PORT = 8080
+AP_DISCOVERY_PORT = 8081
 HEADER_LEN = 16  # Shared key header length
 
 
@@ -84,6 +94,7 @@ class WiFiServer:
         
         # Server socket and client connections
         self.server_socket = None
+        self.discovery_socket = None
         self.clients = {}  # mac -> (socket, addr)
         self.accepting = False
         self.irq_pending = False
@@ -137,6 +148,9 @@ class WiFiServer:
         # Configure AP with SSID, password, and channel
         self.ap.config(essid=AP_SSID, password=AP_PASSWORD, channel=AP_CHANNEL)
         
+        # Set fixed IP for the AP
+        self.ap.ifconfig((AP_IP, '255.255.255.0', AP_IP, '8.8.8.8'))
+        
         # Activate AP
         self.ap.active(True)
         
@@ -148,10 +162,11 @@ class WiFiServer:
             print("WiFiServer: AP active, IP:", self.ap.ifconfig())
 
     def start_server(self):
-        """Start accepting TCP connections."""
+        """Start accepting TCP connections and UDP discovery."""
         if self.server_socket is not None:
             return
         
+        # Start TCP server
         try:
             self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             self.server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -167,6 +182,24 @@ class WiFiServer:
                 print("WiFiServer: failed to start server:", e)
             self.server_socket = None
             self.accepting = False
+        
+        # Start UDP discovery listener
+        self._start_discovery()
+
+    def _start_discovery(self):
+        """Start UDP listener for client discovery."""
+        try:
+            self.discovery_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            self.discovery_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            self.discovery_socket.bind(('', AP_DISCOVERY_PORT))
+            self.discovery_socket.settimeout(1.0)
+            
+            if self.debug:
+                print("WiFiServer: discovery listening on port", AP_DISCOVERY_PORT)
+        except Exception as e:
+            if self.debug:
+                print("WiFiServer: failed to start discovery:", e)
+            self.discovery_socket = None
 
     def stop_server(self):
         """Stop accepting TCP connections and close all client sockets."""
@@ -260,9 +293,29 @@ class WiFiServer:
             except OSError:
                 pass  # No pending connection
         
+        # Check for UDP discovery requests
+        if self.discovery_socket:
+            self._check_discovery()
+        
         # Check each client for data
         for mac in list(self.clients.keys()):
             self._check_client_data(mac)
+
+    def _check_discovery(self):
+        """Check for and respond to UDP discovery requests."""
+        try:
+            self.discovery_socket.setblocking(False)
+            data, addr = self.discovery_socket.recvfrom(1024)
+            if data == b"DISCOVER_MPY":
+                # Send acknowledgment
+                self.discovery_socket.sendto(b"DISCOVER_ACK", addr)
+                if self.debug:
+                    print("WiFiServer: responded to discovery from", addr)
+        except OSError:
+            pass  # No data
+        except Exception as e:
+            if self.debug:
+                print("WiFiServer: discovery error:", e)
 
     def _handle_new_connection(self, sock, addr):
         """Handle a new TCP connection."""

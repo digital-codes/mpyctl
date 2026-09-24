@@ -9,14 +9,12 @@
 #
 # Also receives messages from the server and prints them.
 #
+# Uses UDP broadcast on port 8081 to discover server IP automatically.
+#
 # Configuration:
 #   private.py   : WIFI_SSID, WIFI_PASSWORD, WIFI_CHANNEL
-#                  WIFI_SERVER_IP (server IP address)
 #                  WIFI_KEY (hex, its first 16 bytes become the message header)
 #   config.json  : ble.key (hex) used as the shared key for messages
-#
-# The server must have this board registered via enableNode()/peers.json
-# with the matching MAC address.
 
 import time
 import json
@@ -29,13 +27,14 @@ import private as pr
 WIFI_SSID = pr.WIFI_SSID
 WIFI_PASSWORD = pr.WIFI_PASSWORD
 WIFI_CHANNEL = pr.WIFI_CHANNEL
-SERVER_IP = pr.WIFI_SERVER_IP
 SERVER_PORT = 8080
+DISCOVERY_PORT = 8081
 SHARED_KEY = bytes.fromhex(pr.WIFI_KEY[:32])
+DEFAULT_SERVER_IP = "192.168.1.1"  # Fallback if discovery fails
 
 print("WiFi Client starting...")
 print("SSID:", WIFI_SSID)
-print("Server:", SERVER_IP, "port:", SERVER_PORT)
+print("Server port:", SERVER_PORT)
 print("Shared key:", SHARED_KEY.hex())
 
 try:
@@ -76,6 +75,42 @@ if wlan.status() != 3:
     print("Failed to connect to WiFi, status:", wlan.status())
 else:
     print("Connected! IP:", wlan.ifconfig()[0])
+
+# Discover server IP using UDP broadcast
+def discover_server():
+    """Send UDP broadcast to discover server IP."""
+    try:
+        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+        sock.settimeout(3)
+        
+        # Send discovery request
+        discovery_msg = b"DISCOVER_MPY"
+        sock.sendto(discovery_msg, ('255.255.255.255', DISCOVERY_PORT))
+        print("Discovery broadcast sent...")
+        
+        # Wait for response
+        try:
+            data, addr = sock.recvfrom(1024)
+            if data == b"DISCOVER_ACK":
+                print("Discovered server at:", addr[0])
+                sock.close()
+                return addr[0]
+        except Exception:
+            pass
+        
+        sock.close()
+    except Exception as e:
+        print("Discovery error:", e)
+    
+    return None
+
+SERVER_IP = discover_server()
+if not SERVER_IP:
+    print("Server discovery failed, using default:", DEFAULT_SERVER_IP)
+    SERVER_IP = DEFAULT_SERVER_IP
+
+print("Using server:", SERVER_IP)
 
 # Receive state
 irq_pending = False
