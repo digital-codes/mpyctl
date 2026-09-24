@@ -101,10 +101,10 @@ class WiFiServer:
         self.tx_errors = 0
         self.rx_errors = 0
 
-        # Timer for polling
-        self.timer = None
-        self.timer_id = 3
-        self.poll_ms = 250
+        # Select poll for async I/O
+        import select
+        self.poller = select.poll()
+        self.poll_timeout = 250  # ms
 
         # Get AP settings
         global AP_SSID, AP_PASSWORD, AP_CHANNEL
@@ -194,8 +194,12 @@ class WiFiServer:
             self.server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
             self.server_socket.bind((self.server_ip, AP_LISTEN_PORT))
             self.server_socket.listen(5)
-            self.server_socket.settimeout(1.0)  # Non-blocking with timeout
+            self.server_socket.settimeout(0)  # Non-blocking
             self.accepting = True
+
+            # Register server socket for accept
+            import select
+            self.poller.register(self.server_socket, select.POLLIN)
 
             print("WiFiServer: TCP server listening on %s:%d" % (self.server_ip, AP_LISTEN_PORT))
         except Exception as e:
@@ -203,49 +207,29 @@ class WiFiServer:
             self.server_socket = None
             self.accepting = False
 
-        # Start polling timer
-        self._start_timer()
-
-    def _start_timer(self):
-        """Start polling timer."""
-        import machine
-        self.timer = machine.Timer(self.timer_id)
-        self.timer.init(period=self.poll_ms, mode=machine.Timer.PERIODIC, callback=self._timer_callback)
-
-    def _timer_callback(self, t):
-        """Timer callback to poll for connections and data."""
-        micropython.schedule(self._poll, None)
-
-    def _stop_timer(self):
-        """Stop polling timer."""
-        if self.timer:
-            self.timer.deinit()
-            self.timer = None
-
     def stop_server(self):
         """Stop accepting TCP connections and close all client sockets."""
         self.accepting = False
-        
+
         # Close all client connections
         for addr in list(self.clients.keys()):
             self._close_client(addr)
-        
+
         # Close server socket
         if self.server_socket:
             try:
+                self.poller.unregister(self.server_socket)
                 self.server_socket.close()
             except Exception:
                 pass
             self.server_socket = None
-
-        # Stop polling timer
-        self._stop_timer()
 
     def _close_client(self, addr):
         """Close a specific client connection."""
         if addr in self.clients:
             sock, mac = self.clients[addr]
             try:
+                self.poller.unregister(sock)
                 sock.close()
             except Exception:
                 pass
@@ -303,24 +287,51 @@ class WiFiServer:
         if self.gateway:
             self.gateway.unregister_channel(self.channel_id)
 
-    def _poll(self, t):
-        """Poll for new connections and data. Called periodically."""
+    def _poll(self, t=None):
+        """Poll for new connections and data using select.poll()."""
         if not self.accepting:
             return
-        
-        # Accept new connections
-        if self.server_socket:
-            try:
-                sock, addr = self.server_socket.accept()
-                self._handle_new_connection(sock, addr)
-            except OSError:
-                pass  # No pending connection
-            except Exception as e:
-                print("WiFiServer: ERROR - accept:", e)
 
-        # Check each client for data
-        for addr in list(self.clients.keys()):
-            self._check_client_data(addr)
+        import select
+
+        # Re-register server socket and all client sockets
+        self.poller.register(self.server_socket, select.POLLIN)
+        for addr, (sock, mac) in self.clients.items():
+            self.poller.register(sock, select.POLLIN)
+
+        # Wait for events
+        events = self.poller.poll(self.poll_timeout)
+        if not events:
+            return
+
+        # Handle events
+        for sock, event in events:
+            if event & (select.POLLHUP | select.POLLERR):
+                # Find and close the socket
+                for addr, (client_sock, mac) in list(self.clients.items()):
+                    if client_sock is sock:
+                        if self.debug:
+                            print("WiFiServer: Socket error/hup for %s" % str(addr))
+                        self._close_client(addr)
+                        break
+                continue
+
+            if sock is self.server_socket:
+                # Server socket ready for accept
+                try:
+                    client_sock, addr = self.server_socket.accept()
+                    self._handle_new_connection(client_sock, addr)
+                except OSError:
+                    pass
+                except Exception as e:
+                    if self.debug:
+                        print("WiFiServer: ERROR - accept:", e)
+            else:
+                # Client socket has data
+                for addr, (client_sock, mac) in list(self.clients.items()):
+                    if client_sock is sock:
+                        self._check_client_data(addr)
+                        break
 
     def _handle_new_connection(self, sock, addr):
         """Handle a new TCP connection."""
@@ -330,6 +341,10 @@ class WiFiServer:
         # Accept all connections initially, verify MAC on first data
         self.clients[addr] = (sock, None)
         self.connected += 1
+
+        # Register client socket for reading
+        import select
+        self.poller.register(sock, select.POLLIN)
 
     def _check_client_data(self, addr):
         """Check if there's data from a client."""
