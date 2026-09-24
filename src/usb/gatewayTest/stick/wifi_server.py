@@ -13,10 +13,8 @@
 #     ...
 #   }
 #
-# WiFi AP settings (hardcoded):
-#   SSID: "MPY"
-#   Password: "xxx"
-#   Channel: 3
+# WiFi AP settings (from private.py):
+#   SSID, Password, Channel, IP
 #
 # Only clients with MAC addresses registered via enableNode() are accepted.
 # The server listens on port 8080 for TCP connections.
@@ -31,7 +29,6 @@ import json
 import network
 import socket
 import micropython
-import private as pr
 import usb_channel_server as ucs
 import time
 from channel_defs import KIND_BIDI, DIR_BIDI, MSG_EVENT, MSG_COMMAND, MSG_PEER_ADD, MSG_PEER_DEL, CHANNEL_WIFI
@@ -42,17 +39,14 @@ try:
     AP_SSID = getattr(pr, 'WIFI_SSID', 'MPY')
     AP_PASSWORD = getattr(pr, 'WIFI_PASSWORD', 'xxx')
     AP_CHANNEL = getattr(pr, 'WIFI_CHANNEL', 3)
-    AP_IP = getattr(pr, 'WIFI_SERVER_IP', '192.168.1.1')
 except Exception:
     AP_SSID = "MPY"
     AP_PASSWORD = "xxx"
     AP_CHANNEL = 3
-    AP_IP = "192.168.1.1"
 
 AP_LISTEN_PORT = 8080
 AP_DISCOVERY_PORT = 8081
 HEADER_LEN = 16  # Shared key header length
-
 
 # config stuff
 _CONF_FILE = "config.json"
@@ -95,7 +89,7 @@ class WiFiServer:
         # Server socket and client connections
         self.server_socket = None
         self.discovery_socket = None
-        self.clients = {}  # mac -> (socket, addr)
+        self.clients = {}  # addr -> (socket, mac)
         self.accepting = False
         self.irq_pending = False
         
@@ -105,6 +99,15 @@ class WiFiServer:
         self.received = 0
         self.rejected = 0
         self.forward_dropped = 0
+        self.sent = 0
+        self.tx_errors = 0
+        self.rx_errors = 0
+
+        # Get AP settings
+        global AP_SSID, AP_PASSWORD, AP_CHANNEL
+        self.ssid = AP_SSID
+        self.password = AP_PASSWORD
+        self.wifi_channel = AP_CHANNEL
 
         if self.debug:
             print("WiFiServer: initializing")
@@ -124,7 +127,10 @@ class WiFiServer:
         self.shared_key = bytes.fromhex(config["ble"]["key"])
         self.address = config["wlan"]["addr"]
 
-        print("Device ID:", config["id"], "Wi-Fi AP channel:", AP_CHANNEL, "address:", self.address)
+        print("WiFiServer: Device ID:", config["id"])
+        print("WiFiServer: SSID:", self.ssid)
+        print("WiFiServer: Password:", self.password)
+        print("WiFiServer: WiFi channel:", self.wifi_channel)
 
         # Initialize WiFi AP
         self._init_wifi()
@@ -142,44 +148,55 @@ class WiFiServer:
 
     def _init_wifi(self):
         """Initialize WiFi in AP mode."""
+        print("WiFiServer: Initializing WiFi AP...")
+        
         # Create AP interface (MicroPython uses network.AP_IF)
         self.ap = network.WLAN(network.AP_IF)
         
-        # Configure AP with SSID, password, and channel
-        self.ap.config(essid=AP_SSID, password=AP_PASSWORD, channel=AP_CHANNEL)
+        # Get MAC address
+        self.mac = self.ap.config('mac')
+        print("WiFiServer: AP MAC:", self.mac.hex())
         
-        # Set fixed IP for the AP
-        self.ap.ifconfig((AP_IP, '255.255.255.0', AP_IP, '8.8.8.8'))
+        # Configure AP with SSID, password, and channel
+        print("WiFiServer: Configuring AP with ssid='%s', password='%s', channel=%d" % 
+              (self.ssid, self.password, self.wifi_channel))
+        self.ap.config(essid=self.ssid, password=self.password, channel=self.wifi_channel)
         
         # Activate AP
         self.ap.active(True)
         
         # Wait for AP to be active
+        print("WiFiServer: Waiting for AP to activate...")
         while not self.ap.active():
             time.sleep(0.1)
         
-        if self.debug:
-            print("WiFiServer: AP active, IP:", self.ap.ifconfig())
+        # Get IP configuration
+        self.ap_ip = self.ap.ifconfig()
+        print("WiFiServer: AP IP config:", self.ap_ip)
+        self.server_ip = self.ap_ip[0]  # Use the actual IP from ifconfig
+        
+        # Bind socket to the actual IP
+        print("WiFiServer: Server will bind to IP:", self.server_ip)
 
     def start_server(self):
         """Start accepting TCP connections and UDP discovery."""
         if self.server_socket is not None:
             return
         
-        # Start TCP server
+        print("WiFiServer: Starting TCP server on %s:%d..." % (self.server_ip, AP_LISTEN_PORT))
+        
+        # Start TCP server - bind to the actual IP address
         try:
             self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             self.server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-            self.server_socket.bind(('0.0.0.0', AP_LISTEN_PORT))
+            self.server_socket.bind((self.server_ip, AP_LISTEN_PORT))
             self.server_socket.listen(5)
             self.server_socket.settimeout(1.0)  # Non-blocking with timeout
             self.accepting = True
             
-            if self.debug:
-                print("WiFiServer: listening on port", AP_LISTEN_PORT)
+            print("WiFiServer: TCP server listening on %s:%d" % (self.server_ip, AP_LISTEN_PORT))
         except Exception as e:
-            if self.debug:
-                print("WiFiServer: failed to start server:", e)
+            print("WiFiServer: ERROR - failed to start TCP server:", e)
             self.server_socket = None
             self.accepting = False
         
@@ -188,17 +205,16 @@ class WiFiServer:
 
     def _start_discovery(self):
         """Start UDP listener for client discovery."""
+        print("WiFiServer: Starting UDP discovery on port", AP_DISCOVERY_PORT)
         try:
             self.discovery_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
             self.discovery_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
             self.discovery_socket.bind(('', AP_DISCOVERY_PORT))
             self.discovery_socket.settimeout(1.0)
             
-            if self.debug:
-                print("WiFiServer: discovery listening on port", AP_DISCOVERY_PORT)
+            print("WiFiServer: UDP discovery listening on port", AP_DISCOVERY_PORT)
         except Exception as e:
-            if self.debug:
-                print("WiFiServer: failed to start discovery:", e)
+            print("WiFiServer: ERROR - failed to start UDP discovery:", e)
             self.discovery_socket = None
 
     def stop_server(self):
@@ -206,8 +222,8 @@ class WiFiServer:
         self.accepting = False
         
         # Close all client connections
-        for mac in list(self.clients.keys()):
-            self._close_client(mac)
+        for addr in list(self.clients.keys()):
+            self._close_client(addr)
         
         # Close server socket
         if self.server_socket:
@@ -216,19 +232,27 @@ class WiFiServer:
             except Exception:
                 pass
             self.server_socket = None
+        
+        # Close discovery socket
+        if self.discovery_socket:
+            try:
+                self.discovery_socket.close()
+            except Exception:
+                pass
+            self.discovery_socket = None
 
-    def _close_client(self, mac):
+    def _close_client(self, addr):
         """Close a specific client connection."""
-        if mac in self.clients:
-            sock, addr = self.clients[mac]
+        if addr in self.clients:
+            sock, mac = self.clients[addr]
             try:
                 sock.close()
             except Exception:
                 pass
-            del self.clients[mac]
+            del self.clients[addr]
             self.disconnected += 1
-            if self.debug:
-                print("WiFiServer: client disconnected:", mac.hex())
+            print("WiFiServer: Client disconnected: %s (mac: %s)" % 
+                  (str(addr), mac.hex() if mac else "unknown"))
 
     def enableNode(self, mac, lmk=None):
         """Authorize a client MAC address to connect.
@@ -240,13 +264,11 @@ class WiFiServer:
         """
         mac_bytes = bytes(mac)
         if mac_bytes in self.authorized_macs:
-            if self.debug:
-                print("WiFiServer: MAC already authorized:", mac_bytes.hex())
+            print("WiFiServer: MAC already authorized:", mac_bytes.hex())
             return 0
         
         self.authorized_macs.add(mac_bytes)
-        if self.debug:
-            print("WiFiServer: authorized MAC:", mac_bytes.hex())
+        print("WiFiServer: Authorized MAC:", mac_bytes.hex())
         return 1
 
     def disableNode(self, mac):
@@ -259,22 +281,22 @@ class WiFiServer:
         """
         mac_bytes = bytes(mac)
         if mac_bytes not in self.authorized_macs:
-            if self.debug:
-                print("WiFiServer: MAC not authorized:", mac_bytes.hex())
+            print("WiFiServer: MAC not authorized:", mac_bytes.hex())
             return 0
         
         self.authorized_macs.discard(mac_bytes)
         
-        # Disconnect if connected
-        if mac_bytes in self.clients:
-            self._close_client(mac_bytes)
+        # Disconnect if connected - find by MAC
+        for addr, (sock, m) in list(self.clients.items()):
+            if m == mac_bytes:
+                self._close_client(addr)
         
-        if self.debug:
-            print("WiFiServer: removed MAC:", mac_bytes.hex())
+        print("WiFiServer: Removed MAC:", mac_bytes.hex())
         return 1
 
     def close(self):
         """Stop server, close connections, and unregister the channel."""
+        print("WiFiServer: Closing...")
         self.stop_server()
         
         if self.gateway:
@@ -292,14 +314,16 @@ class WiFiServer:
                 self._handle_new_connection(sock, addr)
             except OSError:
                 pass  # No pending connection
+            except Exception as e:
+                print("WiFiServer: ERROR - accept:", e)
         
         # Check for UDP discovery requests
         if self.discovery_socket:
             self._check_discovery()
         
         # Check each client for data
-        for mac in list(self.clients.keys()):
-            self._check_client_data(mac)
+        for addr in list(self.clients.keys()):
+            self._check_client_data(addr)
 
     def _check_discovery(self):
         """Check for and respond to UDP discovery requests."""
@@ -307,90 +331,77 @@ class WiFiServer:
             self.discovery_socket.setblocking(False)
             data, addr = self.discovery_socket.recvfrom(1024)
             if data == b"DISCOVER_MPY":
-                # Send acknowledgment
-                self.discovery_socket.sendto(b"DISCOVER_ACK", addr)
-                if self.debug:
-                    print("WiFiServer: responded to discovery from", addr)
+                # Send acknowledgment with our IP
+                response = b"DISCOVER_ACK:" + self.server_ip.encode()
+                self.discovery_socket.sendto(response, addr)
+                print("WiFiServer: Discovery response sent to %s: %s" % (str(addr), response))
         except OSError:
             pass  # No data
         except Exception as e:
-            if self.debug:
-                print("WiFiServer: discovery error:", e)
+            print("WiFiServer: ERROR - discovery:", e)
 
     def _handle_new_connection(self, sock, addr):
         """Handle a new TCP connection."""
-        try:
-            # Get client MAC from station info
-            # Note: On ESP32, we can't easily get MAC of connected station
-            # We'll use a placeholder and authorize based on first message
-            
-            if self.debug:
-                print("WiFiServer: new connection from", addr)
-            
-            # Add to clients with None MAC initially (will be set when we receive data)
-            # For now, accept all connections and verify in data handler
-            self.clients[None] = (sock, addr)
-            
-        except Exception as e:
-            if self.debug:
-                print("WiFiServer: error accepting connection:", e)
-            try:
-                sock.close()
-            except Exception:
-                pass
+        print("WiFiServer: New connection from %s" % str(addr))
+        
+        # Accept all connections initially, verify MAC on first data
+        self.clients[addr] = (sock, None)
+        self.connected += 1
 
-    def _check_client_data(self, mac):
+    def _check_client_data(self, addr):
         """Check if there's data from a client."""
-        if mac not in self.clients:
+        if addr not in self.clients:
             return
         
-        sock, addr = self.clients[mac]
+        sock, client_mac = self.clients[addr]
         try:
             sock.settimeout(0)  # Non-blocking for MicroPython
             data = sock.recv(1024)
             if data:
-                self._handle_client_data(mac, data)
+                self._handle_client_data(addr, data)
             else:
                 # No data - connection closed
-                if mac is not None:
-                    self._close_client(mac)
+                print("WiFiServer: Connection closed by client %s" % str(addr))
+                self._close_client(addr)
         except OSError:
             pass  # No data available
         except Exception as e:
-            if self.debug:
-                print("WiFiServer: error reading from client:", e)
-            if mac is not None:
-                self._close_client(mac)
+            print("WiFiServer: ERROR - reading from %s: %s" % (str(addr), e))
+            self.rx_errors += 1
+            self._close_client(addr)
 
-    def _handle_client_data(self, mac, data):
+    def _handle_client_data(self, addr, data):
         """Process data received from a client.
         
         Expected format: 16-byte shared key header + application data
         """
+        print("WiFiServer: Received %d bytes from %s" % (len(data), str(addr)))
+        
         if len(data) < HEADER_LEN:
-            if self.debug:
-                print("WiFiServer: received short data:", len(data))
+            print("WiFiServer: ERROR - short data: %d bytes" % len(data))
             self.rejected += 1
             return
         
         # Verify shared key header
         if data[:HEADER_LEN] != self.shared_key:
-            if self.debug:
-                print("WiFiServer: invalid shared key from client")
+            print("WiFiServer: ERROR - invalid shared key from %s" % str(addr))
+            print("WiFiServer: Expected: %s" % self.shared_key.hex())
+            print("WiFiServer: Got:      %s" % data[:HEADER_LEN].hex())
             self.rejected += 1
             return
         
         application_data = data[HEADER_LEN:]
         
-        # If MAC is None, try to get it from the socket
-        if mac is None:
-            # First message - try to determine MAC
-            # For now, accept the connection
-            mac = bytes([0] * 6)  # Placeholder
+        # If MAC is None, use a placeholder
+        sock, client_mac = self.clients[addr]
+        if client_mac is None:
+            client_mac = bytes([0] * 6)  # Placeholder
+        
+        print("WiFiServer: Data from %s: %s" % (str(addr), application_data))
         
         # Forward to USB gateway
         if self.gateway:
-            payload = mac + application_data
+            payload = client_mac + application_data
             if self.gateway.send(
                 self.channel_id,
                 MSG_EVENT,
@@ -402,8 +413,7 @@ class WiFiServer:
                 self.forward_dropped += 1
         else:
             self.received += 1
-            if self.debug:
-                print("WiFiServer: received:", application_data)
+            print("WiFiServer: No gateway, data logged locally")
 
     def _handle_outbound(self, msg_type, payload):
         """Handle outbound messages from the host.
@@ -417,89 +427,88 @@ class WiFiServer:
             0 if no clients or general failure
             negative on specific errors
         """
+        print("WiFiServer: Outbound msg_type=%d, payload_len=%d" % (msg_type, len(payload)))
+        
         if msg_type == MSG_COMMAND:
             if len(payload) < 1:
-                if self.debug:
-                    print("WiFiServer: no peer index specified")
-                return -1  # No peer index
+                print("WiFiServer: ERROR - no peer index")
+                return -1
 
             peer_index = payload[0]
             message = payload[1:].decode("utf-8", "replace")
 
-            # Get list of connected client MACs
-            client_macs = [mac for mac in self.clients.keys() if mac is not None]
+            # Get list of connected client addresses
+            client_addrs = list(self.clients.keys())
             
-            if not client_macs:
-                if self.debug:
-                    print("WiFiServer: no clients connected")
-                return -2  # No clients connected
+            if not client_addrs:
+                print("WiFiServer: ERROR - no clients connected")
+                return -2
             
-            if peer_index >= len(client_macs):
-                if self.debug:
-                    print(f"WiFiServer: invalid peer index {peer_index} (max {len(client_macs)-1})")
-                return -3  # Invalid peer index
+            if peer_index >= len(client_addrs):
+                print("WiFiServer: ERROR - invalid peer index %d (max %d)" % 
+                      (peer_index, len(client_addrs) - 1))
+                return -3
 
-            mac = client_macs[peer_index]
+            addr = client_addrs[peer_index]
             full_message = self.shared_key[:HEADER_LEN] + message.encode()
 
-            if self.debug:
-                print(f"WiFiServer: sending to peer {peer_index} ({mac.hex() if mac else 'None'}): {message}")
+            print("WiFiServer: Sending to peer %d (%s): %s" % (peer_index, str(addr), message))
 
-            result = self._send_to_client(mac, full_message)
+            result = self._send_to_client(addr, full_message)
             return result
 
         elif msg_type == MSG_PEER_ADD:
             if len(payload) < 6:
-                if self.debug:
-                    print("WiFiServer: peer_add requires at least 6 bytes (MAC)")
-                return -4  # Invalid MAC length
+                print("WiFiServer: ERROR - peer_add requires 6 bytes")
+                return -4
 
             mac = bytes(payload[:6])
-
-            if self.debug:
-                print(f"WiFiServer: authorizing MAC {mac.hex()}")
+            print("WiFiServer: Authorizing MAC %s" % mac.hex())
 
             result = self.enableNode(mac)
             return result
 
         elif msg_type == MSG_PEER_DEL:
             if len(payload) < 6:
-                if self.debug:
-                    print("WiFiServer: peer_del requires 6 bytes (MAC)")
-                return -4  # Invalid MAC length
+                print("WiFiServer: ERROR - peer_del requires 6 bytes")
+                return -4
 
             mac = bytes(payload[:6])
-
-            if self.debug:
-                print(f"WiFiServer: de-authorizing MAC {mac.hex()}")
+            print("WiFiServer: De-authorizing MAC %s" % mac.hex())
 
             result = self.disableNode(mac)
             return result
         
-        return 0  # Unknown msg_type
+        print("WiFiServer: ERROR - unknown msg_type %d" % msg_type)
+        return 0
 
-    def _send_to_client(self, mac, message):
+    def _send_to_client(self, addr, message):
         """Send a message to a specific client.
         
         Returns:
             1 on success
             0 on failure
         """
-        if mac not in self.clients:
-            if self.debug:
-                print("WiFiServer: client not connected:", mac.hex() if mac else "None")
+        if addr not in self.clients:
+            print("WiFiServer: ERROR - client not connected: %s" % str(addr))
             return 0
         
         try:
-            sock, addr = self.clients[mac]
-            sock.send(message)
-            if self.debug:
-                print("WiFiServer: sent to", mac.hex() if mac else "None")
-            return 1
+            sock, mac = self.clients[addr]
+            sent = sock.send(message)
+            if sent == len(message):
+                self.sent += 1
+                print("WiFiServer: Sent %d bytes to %s" % (sent, str(addr)))
+                return 1
+            else:
+                print("WiFiServer: ERROR - partial send to %s: %d/%d" % 
+                      (str(addr), sent, len(message)))
+                self.tx_errors += 1
+                return 0
         except Exception as e:
-            if self.debug:
-                print("WiFiServer: send error:", e)
-            self._close_client(mac)
+            print("WiFiServer: ERROR - send to %s: %s" % (str(addr), e))
+            self.tx_errors += 1
+            self._close_client(addr)
             return 0
 
     def send_to_all_clients(self, message):
@@ -509,45 +518,58 @@ class WiFiServer:
             Number of successful sends if all succeed
             Negative value if any sends failed
         """
-        client_macs = [mac for mac in self.clients.keys() if mac is not None]
-        if not client_macs:
+        client_addrs = list(self.clients.keys())
+        if not client_addrs:
             return 0
         
         success_count = 0
-        for mac in client_macs:
-            if self._send_to_client(mac, message):
+        for addr in client_addrs:
+            if self._send_to_client(addr, message):
                 success_count += 1
         
-        if success_count != len(client_macs):
-            return success_count - len(client_macs)
+        if success_count != len(client_addrs):
+            return success_count - len(client_addrs)
         return success_count
 
     def get_connected_count(self):
         """Return number of connected clients."""
-        return len([mac for mac in self.clients.keys() if mac is not None])
+        return len(self.clients)
 
-    def get_client_macs(self):
-        """Return list of connected client MAC addresses."""
-        return [mac for mac in self.clients.keys() if mac is not None]
+    def get_client_list(self):
+        """Return list of connected clients as strings."""
+        result = []
+        for addr, (sock, mac) in self.clients.items():
+            result.append({"addr": str(addr), "mac": mac.hex() if mac else "unknown"})
+        return result
 
     def get_authorized_macs(self):
         """Return list of authorized MAC addresses."""
-        return list(self.authorized_macs)
+        return [m.hex() for m in self.authorized_macs]
 
     def stats(self):
         """Configuration plus connection statistics."""
         return {
-            "config": {
-                "address": self.address,
-                "ssid": AP_SSID,
-                "channel": AP_CHANNEL,
-                "port": AP_LISTEN_PORT,
+            "wifi": {
+                "ssid": self.ssid,
+                "channel": self.wifi_channel,
+                "ip": self.server_ip,
+                "mac": self.mac.hex() if self.mac else "unknown",
             },
-            "connected": self.connected,
-            "disconnected": self.disconnected,
-            "received": self.received,
-            "rejected": self.rejected,
-            "forward_dropped": self.forward_dropped,
+            "server": {
+                "port": AP_LISTEN_PORT,
+                "listening": self.accepting,
+                "discovery_port": AP_DISCOVERY_PORT,
+            },
+            "stats": {
+                "connected": self.connected,
+                "disconnected": self.disconnected,
+                "received": self.received,
+                "rejected": self.rejected,
+                "sent": self.sent,
+                "tx_errors": self.tx_errors,
+                "rx_errors": self.rx_errors,
+                "forward_dropped": self.forward_dropped,
+            },
             "clients": self.get_connected_count(),
             "authorized_macs": len(self.authorized_macs),
         }
@@ -564,8 +586,9 @@ if __name__ == "__main__":
     # Start accepting connections
     server.start_server()
     
-    print("WiFiServer: AP running, SSID:", AP_SSID)
-    print("Connect clients and press Ctrl+C to stop")
+    print("WiFiServer: AP running, SSID:", server.ssid)
+    print("WiFiServer: Server IP:", server.server_ip)
+    print("WiFiServer: Connect clients and press Ctrl+C to stop")
     
     try:
         while True:
