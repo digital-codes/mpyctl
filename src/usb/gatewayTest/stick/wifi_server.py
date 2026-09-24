@@ -392,7 +392,7 @@ class WiFiServer:
     def _handle_client_data(self, addr, data):
         """Process data received from a client.
 
-        Expected format: 16-byte shared key header + application data
+        Expected format: peer_index(1) + message (no shared key - WPA security)
         """
         if self.debug:
             print("WiFiServer: ============================================")
@@ -401,32 +401,20 @@ class WiFiServer:
             print("WiFiServer: Raw hex:", data.hex())
             print("WiFiServer: Length:", len(data))
 
-        if len(data) < HEADER_LEN:
+        if len(data) < 1:
             if self.debug:
-                print("WiFiServer: ERROR - short data: %d bytes" % len(data))
+                print("WiFiServer: ERROR - no data")
             self.rejected += 1
             return
-
-        # Verify shared key header
-        header = data[:HEADER_LEN]
-        if header != self.shared_key:
-            print("WiFiServer: ERROR - invalid shared key from %s" % str(addr))
-            print("WiFiServer: Expected: %s" % self.shared_key.hex())
-            print("WiFiServer: Got:      %s" % header.hex())
-            self.rejected += 1
-            return
-
-        if self.debug:
-            print("WiFiServer: Header: %s" % header.hex())
 
         # Extract peer_index and message from payload
         # Format: peer_index(1) + message
-        if len(data) > HEADER_LEN:
-            peer_index = data[HEADER_LEN]
-            message = data[HEADER_LEN + 1:]
-        else:
-            peer_index = 0
-            message = b""
+        peer_index = data[0]
+        message = data[1:]
+
+        if self.debug:
+            print("WiFiServer: Peer index: %d" % peer_index)
+            print("WiFiServer: Message:", message)
 
         if self.debug:
             print("WiFiServer: Peer index: %d" % peer_index)

@@ -93,11 +93,10 @@ class WiFiClient:
         if shared_key is None:
             raise ValueError("No shared key provided")
 
-        # Convert to bytes if needed
+        # Convert to bytes if needed (not used for WiFi - WPA security)
         if isinstance(shared_key, str):
             shared_key = bytes.fromhex(shared_key[:32])
         self.shared_key = shared_key
-        print(f"DEBUG: shared_key = {self.shared_key.hex()}")
     
     def connect(self):
         """Connect to the WiFi server."""
@@ -124,14 +123,14 @@ class WiFiClient:
         self.connected = False
     
     def send_message(self, message, peer_index=0):
-        """Send a message with shared key header and peer index."""
+        """Send a message with peer index (no shared key - WPA security)."""
         if not self.connected or not self.socket:
             return False
 
         try:
             if isinstance(message, str):
                 message = message.encode()
-            payload = self.shared_key + bytes([peer_index]) + message
+            payload = bytes([peer_index]) + message
             self.socket.send(payload)
             return True
         except Exception as e:

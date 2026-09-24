@@ -103,13 +103,13 @@ MY_PEER_INDEX = 0
 
 
 def send_message(message):
-    """Send a message to the server with shared key header and peer index."""
+    """Send a message to the server with peer index (no shared key - WPA security)."""
     global sock
     if sock is None:
         return False
 
     try:
-        payload = SHARED_KEY[:16] + bytes([MY_PEER_INDEX]) + message.encode()
+        payload = bytes([MY_PEER_INDEX]) + message.encode()
         sock.send(payload)
         return True
     except Exception as e:
