@@ -18,6 +18,7 @@
 from button_sensor import DigitalInputSensor
 from rgb_sensor import RGBOutputSensor
 from wifi_server import WiFiServer
+from channel_defs import CHANNEL_WIFI
 
 button = None
 rgb = None
@@ -45,7 +46,7 @@ def run(items = ("button", "rgb", "wifi")):
             created.append(rgb)
 
         if "wifi" in items and wifi is None:
-            wifi = WiFiServer(3)
+            wifi = WiFiServer(CHANNEL_WIFI)
             wifi.start_server()
             created.append(wifi)
 
