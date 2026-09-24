@@ -47,7 +47,13 @@ except Exception as e:
 
 # Connect to WiFi
 wlan = network.WLAN(network.STA_IF)
+wlan.active(False) # Reset WiFi
+time.sleep(1)
 wlan.active(True)
+
+while not wlan.active():
+    print("Activating WiFi...")
+    time.sleep(1)
 
 # Configure channel before connecting
 try:
@@ -60,56 +66,18 @@ try:
 except Exception:
     pass
 
-print("Connecting to WiFi...")
-wlan.connect(WIFI_SSID, WIFI_PASSWORD)
-
 # Wait for connection
-max_wait = 20
-while max_wait > 0:
-    if wlan.status() < 0 or wlan.status() >= 3:
-        break
-    max_wait -= 1
-    time.sleep(0.5)
+print("Connecting to WiFi...")
+wlan.connect(WIFI_SSID) # , WIFI_PASSWORD)
+while not wlan.isconnected():
+    print("Connecting to WiFi...")
+    for _ in range(10):
+        if wlan.isconnected():
+            break
+        time.sleep(1)
 
-if wlan.status() != 3:
-    print("Failed to connect to WiFi, status:", wlan.status())
-else:
-    print("Connected! IP:", wlan.ifconfig()[0])
-
-# Discover server IP using UDP broadcast
-def discover_server():
-    """Send UDP broadcast to discover server IP."""
-    try:
-        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
-        sock.settimeout(3)
-        
-        # Send discovery request
-        discovery_msg = b"DISCOVER_MPY"
-        sock.sendto(discovery_msg, ('255.255.255.255', DISCOVERY_PORT))
-        print("Discovery broadcast sent...")
-        
-        # Wait for response
-        try:
-            data, addr = sock.recvfrom(1024)
-            if data == b"DISCOVER_ACK":
-                print("Discovered server at:", addr[0])
-                sock.close()
-                return addr[0]
-        except Exception:
-            pass
-        
-        sock.close()
-    except Exception as e:
-        print("Discovery error:", e)
-    
-    return None
-
-SERVER_IP = discover_server()
-if not SERVER_IP:
-    print("Server discovery failed, using default:", DEFAULT_SERVER_IP)
-    SERVER_IP = DEFAULT_SERVER_IP
-
+print("Connected! IP:", wlan.ifconfig()[0])
+SERVER_IP = wlan.ifconfig()[3]  # Use gateway as server
 print("Using server:", SERVER_IP)
 
 # Receive state

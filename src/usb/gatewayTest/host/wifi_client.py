@@ -20,33 +20,33 @@ import time
 import os
 import json
 
+# Add stick directory to Python path
+stick_path = os.path.join(os.path.dirname(__file__), "..", "stick")
+if stick_path not in sys.path:
+    sys.path.insert(0, stick_path)
+
+# Import private configuration
+try:
+    import private as pr
+except ImportError:
+    pr = None
+
 # Default configuration
 DEFAULT_SERVER_IP = "192.168.1.1"
 DEFAULT_PORT = 8080
 
-# Try to load configuration from private.py in stick directory
-PRIVATE_PATH = os.path.join(os.path.dirname(__file__), "..", "stick", "private.py")
 
 def load_private_config():
-    """Try to load WiFi configuration from private.py."""
-    try:
-        if os.path.exists(PRIVATE_PATH):
-            # Read the file and extract values
-            with open(PRIVATE_PATH, "r") as f:
-                content = f.read()
-            
-            # Simple extraction of constants
-            result = {}
-            for line in content.split('\n'):
-                line = line.strip()
-                if line.startswith('WIFI_SERVER_IP'):
-                    result['server_ip'] = line.split('=')[1].strip().strip('"').strip("'")
-                elif line.startswith('WIFI_PORT'):
-                    result['port'] = int(line.split('=')[1].strip())
-            return result
-    except Exception as e:
-        print(f"Warning: Could not load private.py: {e}")
-    return {}
+    """Try to load WiFi configuration from private module."""
+    result = {}
+    if pr:
+        if hasattr(pr, 'WIFI_SERVER_IP'):
+            result['server_ip'] = pr.WIFI_SERVER_IP
+        if hasattr(pr, 'WIFI_PORT'):
+            result['port'] = pr.WIFI_PORT
+        if hasattr(pr, 'WIFI_KEY'):
+            result['shared_key'] = pr.WIFI_KEY
+    return result
 
 
 class WiFiClient:
@@ -108,7 +108,9 @@ class WiFiClient:
             return False
         
         try:
-            payload = self.shared_key + message.encode()
+            if isinstance(message, str):
+                message = message.encode()
+            payload = self.shared_key + message
             self.socket.send(payload)
             return True
         except Exception as e:
@@ -157,13 +159,14 @@ def main():
     
     server_ip = args.server_ip or config.get('server_ip', DEFAULT_SERVER_IP)
     port = args.port or config.get('port', DEFAULT_PORT)
+    shared_key = config.get('shared_key', None)
     
     print(f"WiFi Client")
     print(f"Server: {server_ip}:{port}")
     
     # Create client
     try:
-        client = WiFiClient(server_ip, port)
+        client = WiFiClient(server_ip, port, shared_key=shared_key)
     except ValueError as e:
         print(f"Error: {e}")
         sys.exit(1)
