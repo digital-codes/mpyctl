@@ -455,12 +455,13 @@ class TUI:
             self.send_control(CTRL_GET_WIFI_CLIENTS)
 
     def _parse_wifi_clients(self, payload):
-        """Parse WiFi client list from device response - only add, never replace."""
+        """Parse WiFi client list from device response - sync with device list."""
         if not payload:
             return
         try:
             count = payload[0]
             pos = 1
+            synced = []
             for _ in range(count):
                 ip_len = payload[pos]
                 pos += 1
@@ -470,9 +471,15 @@ class TUI:
                 mac_len = payload[pos]
                 pos += 1
                 pos += mac_len
-                # Only ADD if not already tracked from messages
-                if ip not in self.wifi_clients:
-                    self.wifi_clients.append(ip)
+                synced.append(ip)
+
+            # Start with device's list, then add any clients we tracked from messages
+            # that aren't in device's list (might be timing lag)
+            combined = set(synced)
+            for ip in self.wifi_clients:
+                if ip not in synced:
+                    combined.add(ip)
+            self.wifi_clients = list(combined)
         except Exception:
             pass
 
