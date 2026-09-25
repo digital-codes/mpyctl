@@ -121,20 +121,19 @@ def receive_messages():
     global received_count
     if sock is None:
         return
-    
+
     try:
         sock.setblocking(False)
         data = sock.recv(1024)
         if data:
-            # Check for shared key header
-            if len(data) >= 16 and data[:16] == SHARED_KEY:
-                application_data = data[16:]
+            # WiFi: message is peer_index(1) + data
+            if len(data) >= 1:
+                peer_index = data[0]
+                message = data[1:]
                 print("\n*** Received from server ***")
-                print("    Data:", application_data.decode())
+                print("    Peer index:", peer_index)
+                print("    Data:", message.decode('utf-8', errors='replace'))
                 received_count += 1
-            else:
-                print("\n*** Received from server (no valid header) ***")
-                print("    Data:", data)
     except OSError:
         pass  # No data available
     except Exception as e:

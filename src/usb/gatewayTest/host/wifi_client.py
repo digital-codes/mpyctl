@@ -142,26 +142,27 @@ class WiFiClient:
         """Check for and receive a message."""
         if not self.connected or not self.socket:
             return None
-        
+
         try:
             data = self.socket.recv(1024)
             if not data:
                 # Connection closed
                 self.connected = False
                 return None
-            
-            # Check for shared key header
-            if len(data) >= 16 and data[:16] == self.shared_key:
-                application_data = data[16:]
+
+            # WiFi: message is peer_index(1) + data
+            if len(data) >= 1:
+                peer_index = data[0]
+                message = data[1:]
                 self.received_count += 1
-                return application_data.decode('utf-8', errors='replace')
-            else:
-                return data.decode('utf-8', errors='replace')
+                return message.decode('utf-8', errors='replace')
+            return None
         except socket.timeout:
             return None
         except Exception as e:
             print(f"Receive error: {e}")
             self.connected = False
+            return None
             return None
 
 
