@@ -103,12 +103,13 @@ class WiFiServer:
         # Select poll for async I/O
         import select
         self.poller = select.poll()
-        self.poll_timeout = 250  # ms
+        self.poll_timeout = 50  # ms - must be less than timer period to avoid blocking
 
         # Timer to call _poll
         import machine
         self.timer = None
         self.timer_id = 3
+        self._poll_active = False  # Guard against timer reentry
 
         # Get AP settings
         global AP_SSID, AP_PASSWORD, AP_CHANNEL
@@ -308,7 +309,12 @@ class WiFiServer:
 
     def _timer_callback(self, t):
         """Timer callback to poll for connections and data."""
-        self._poll()
+        if not self._poll_active:
+            self._poll_active = True
+            try:
+                self._poll()
+            finally:
+                self._poll_active = False
 
     def _poll(self, t=None):
         """Poll for new connections and data using select.poll()."""
