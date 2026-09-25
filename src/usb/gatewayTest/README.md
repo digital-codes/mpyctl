@@ -149,8 +149,8 @@ The client sends `sensor message <n>` every 5 seconds.
 - Creates Access Point: SSID "MPY", password from `private.py`, channel 3
 - TCP server on port 8080
 - Gateway IP: 192.168.4.1 (always .1 of AP subnet)
-- Clients auto-authorize on first data (no peer management needed)
-- Same 16-byte shared key header protocol as ESP-NOW
+- Security: WPA2 (no shared key needed)
+- No peer management - clients auto-detected by IP address
 
 ### Configuration
 
@@ -158,10 +158,9 @@ WiFi uses the same `config.json` as ESP-NOW. Additional `private.py` settings:
 
 ```python
 WIFI_SSID = "MPY"
-WIFI_PASSWORD = "xxx"          # WPA2 auth (authmode=3)
+WIFI_PASSWORD = "xxx"          # WPA2 auth
 WIFI_CHANNEL = 3
 WIFI_PORT = 8080
-WIFI_KEY = <hex key>           # Same as ENOW_KEY for shared key
 ```
 
 ### Running the Server
@@ -182,14 +181,22 @@ Copy to a second ESP32 and run:
 - `config.json`
 
 Client automatically uses gateway IP from WiFi interface config.
+Assign `MY_PEER_INDEX` in the client to identify it.
 
 ### Running the Client (Linux)
 
 ```bash
 python3 host/wifi_client.py -i wlan0              # Auto-detect gateway from interface
 python3 host/wifi_client.py -i wlan0 -c 3         # Send 3 messages
-python3 host/wifi_client.py -i wlan0 -m "hello"  # Single message
+python3 host/wifi_client.py -i wlan0 -m "hello"    # Single message
 ```
+
+### TUI Usage (WiFi Mode)
+
+- Incoming messages display client IP address
+- Press `m` to enter message mode
+- Up/Down arrows cycle through seen client IPs
+- Press Enter to send, Esc to cancel
 
 The client derives gateway IP (.1 of local subnet) from the specified interface.
 
@@ -197,11 +204,13 @@ The client derives gateway IP (.1 of local subnet) from the specified interface.
 
 ## Peer Management
 
-Both ESP-NOW and WiFi use the same peer management mechanism:
+Peer management is used only for ESP-NOW mode:
 
 - Peers defined in `peers.json`: `[{"mac": "<hex>", "lmk": "<hex>"}]`
-- Host loads this file and sends `MSG_PEER_ADD` / `MSG_PEER_DEL` to gateway
-- Only authorized MAC addresses can connect (WiFi) or communicate (ESP-NOW)
+- Host loads this file and sends `MSG_PEER_ADD` / `MSG_PEER_DEL` to device
+- Only authorized MAC addresses can communicate via ESP-NOW
+
+WiFi mode does not use peer management - any client with the WPA2 password can connect.
 
 ---
 
