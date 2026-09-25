@@ -348,8 +348,8 @@ class WiFiServer:
             if sock is self.server_socket:
                 # Server socket ready for accept
                 try:
-                    client_sock, addr = self.server_socket.accept()
-                    self._handle_new_connection(client_sock, addr)
+                    client_sock, client_addr = self.server_socket.accept()
+                    self._handle_new_connection(client_sock, client_addr)
                 except OSError:
                     pass
                 except Exception as e:
@@ -398,7 +398,7 @@ class WiFiServer:
             if self.debug:
                 print("WiFiServer: ERROR - reading from %s: %s" % (str(client_ip), e))
             self.rx_errors += 1
-            self._close_client(addr)
+            self._close_client(client_ip)
 
     def _handle_client_data(self, client_ip, data):
         """Process data received from a client.
@@ -439,11 +439,11 @@ class WiFiServer:
         sock, client_mac = self.clients[client_ip]
         if client_mac is None:
             # Encode client IP as 4-byte identifier
-            ip_parts = addr[0].split('.')
+            ip_parts = client_ip.split('.')
             client_mac = bytes([int(x) for x in ip_parts])
 
         if self.debug:
-            print("WiFiServer: Data from %s: %s" % (str(addr), message))
+            print("WiFiServer: Data from %s: %s" % (str(client_ip), message))
         
         # Forward to USB gateway
         if self.gateway:
@@ -543,9 +543,9 @@ class WiFiServer:
                 self.tx_errors += 1
                 return 0
         except Exception as e:
-            print("WiFiServer: ERROR - send to %s: %s" % (str(addr), e))
+            print("WiFiServer: ERROR - send to %s: %s" % (str(client_ip), e))
             self.tx_errors += 1
-            self._close_client(addr)
+            self._close_client(client_ip)
             return 0
 
     def send_to_all_clients(self, message):
