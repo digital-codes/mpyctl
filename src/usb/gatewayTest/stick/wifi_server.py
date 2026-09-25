@@ -477,6 +477,9 @@ class WiFiServer:
                 print("WiFiServer: ERROR - no clients connected")
                 return -2
 
+            print("WiFiServer: DEBUG - client_addrs =", client_addrs)
+            print("WiFiServer: DEBUG - peer_index =", peer_index)
+
             if peer_index >= len(client_addrs):
                 print("WiFiServer: ERROR - invalid peer index %d (max %d)" %
                       (peer_index, len(client_addrs) - 1))

@@ -480,6 +480,7 @@ class TUI:
 
         payload = bytes([peer_index]) + message.encode()
         try:
+            print(f"DEBUG: Sending to channel {self.wireless_channel}, payload={payload.hex()}")
             self.gateway.send(self.wireless_channel, MSG_COMMAND, payload)
             mode = "WiFi" if self.use_wifi else "ESP-NOW"
             self.last_action = f"sent via {mode} to peer {peer_index}: {message[:20]}"
