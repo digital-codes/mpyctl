@@ -181,7 +181,7 @@ Copy to a second ESP32 and run:
 - `config.json`
 
 Client automatically uses gateway IP from WiFi interface config.
-Assign `MY_PEER_INDEX` in the client to identify it.
+No peer index needed - server identifies clients by IP address.
 
 ### Running the Client (Linux)
 
@@ -190,6 +190,14 @@ python3 host/wifi_client.py -i wlan0              # Auto-detect gateway from int
 python3 host/wifi_client.py -i wlan0 -c 3         # Send 3 messages
 python3 host/wifi_client.py -i wlan0 -m "hello"    # Single message
 ```
+
+### Client Identification
+
+WiFi clients are identified by IP address only (not port). When a client disconnects and reconnects:
+- Server tracks by IP string key in `self.clients` dict
+- TUI syncs client list every 5 seconds via `CTRL_GET_WIFI_CLIENTS`
+- TUI also tracks clients from incoming messages
+- Combined list ensures clients aren't lost during brief disconnects
 
 ### TUI Usage (WiFi Mode)
 
@@ -285,7 +293,7 @@ sensor_test_espnow.stop()
 python3 tests/usb_channel_smoketest.py
 ```
 
-Tests framing, ping, channel list, status, RGB round trip, button events, and wireless receive path.
+Tests framing, ping, channel list, status, RGB round trip, button events, wireless receive path, peer management, and WiFi client list sync.
 
 ---
 

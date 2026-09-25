@@ -171,7 +171,21 @@ class _WLAN:
 
 
 network.WLAN = _WLAN
+network.AP_IF = 1
 sys.modules["network"] = network
+
+# select module stub for WiFi server
+select = types.ModuleType("select")
+
+
+class _poll:
+    POLLIN = 1
+    POLLHUP = 2
+    POLLERR = 4
+
+
+select.poll = lambda: _poll()
+sys.modules["select"] = select
 
 # Socket mock for WiFi server
 socket_mod = types.ModuleType("socket")
@@ -565,3 +579,64 @@ trace_async = run_scenario(sync_in=False)
 assert trace_sync == trace_async, "sync/async IN completion must be indistinguishable"
 print("PASS: %d traced frames identical in sync and async IN-completion modes"
       % len(trace_sync))
+
+
+# --- WiFi-specific tests -------------------------------------------------
+print("\n=== WiFi-specific tests ===")
+
+debug("Testing WiFi client tracking by IP...")
+
+import wifi_server
+
+
+class FakeGateway:
+    def __init__(self):
+        self.sent = []
+
+    def send(self, channel, msg_type, payload, raise_on_full=True):
+        self.sent.append((channel, msg_type, payload))
+        return True
+
+    def register_channel(self, *args, **kwargs):
+        pass
+
+
+ws = wifi_server.WiFiServer(channel_id=3, debug=False)
+ws.gateway = FakeGateway()
+
+ws.clients["192.168.4.2"] = (None, None)
+ws.clients["192.168.4.3"] = (None, None)
+
+assert len(ws.clients) == 2
+assert "192.168.4.2" in ws.clients
+assert "192.168.4.3" in ws.clients
+
+client_list = ws.get_client_list()
+ips = [c["ip"] for c in client_list]
+assert "192.168.4.2" in ips
+assert "192.168.4.3" in ips
+debug("WiFi client tracking test passed")
+
+debug("Testing TUI WiFi client handling...")
+
+tui = sensor_tui.TUI(None, use_wifi=True)
+assert tui.use_wifi == True
+assert tui.wifi_clients == []
+
+test_payload = bytes([192, 168, 4, 2]) + b"hello world"
+tui.handle_frame(3, ucs.MSG_EVENT, test_payload)
+
+assert "192.168.4.2" in tui.wifi_clients
+debug("TUI WiFi client handling test passed")
+
+debug("Testing TUI WiFi client list sync...")
+
+# Build sync payload: count(1) + ip_len(1) + ip + mac_len(1) + mac
+sync_payload = bytes([1]) + bytes([11]) + b'192.168.4.3' + bytes([7]) + b'unknown'
+tui._parse_wifi_clients(sync_payload)
+
+assert "192.168.4.2" in tui.wifi_clients
+assert "192.168.4.3" in tui.wifi_clients
+debug("TUI WiFi client sync test passed")
+
+print("PASS: All WiFi-specific tests passed")
