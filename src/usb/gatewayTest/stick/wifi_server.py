@@ -304,7 +304,7 @@ class WiFiServer:
 
     def _timer_callback(self, t):
         """Timer callback to poll for connections and data."""
-        micropython.schedule(self._poll, None)
+        self._poll()
 
     def _poll(self, t=None):
         """Poll for new connections and data using select.poll()."""
