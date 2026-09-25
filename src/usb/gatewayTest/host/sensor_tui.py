@@ -586,6 +586,7 @@ class TUI:
                         peer_label = client_ip
 
                         # Track unique client IPs
+                        print(f"DEBUG: Adding client {client_ip}, current list={self.wifi_clients}")
                         if client_ip not in self.wifi_clients:
                             self.wifi_clients.append(client_ip)
                     except Exception:
@@ -753,6 +754,7 @@ class TUI:
                 elif key == ord("m"):
                     # Enter message mode
                     client_list = self.wifi_clients if self.use_wifi else self.peers
+                    print(f"DEBUG: wifi_clients={self.wifi_clients}, peers={len(self.peers)}")
                     if client_list:
                         self.input_mode = True
                         self.input_text = ""
