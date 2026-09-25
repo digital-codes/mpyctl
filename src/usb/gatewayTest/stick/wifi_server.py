@@ -31,7 +31,7 @@ import socket
 import micropython
 import usb_channel_server as ucs
 import time
-from channel_defs import KIND_BIDI, DIR_BIDI, MSG_EVENT, MSG_COMMAND, MSG_PEER_ADD, MSG_PEER_DEL, CHANNEL_WIFI
+from channel_defs import KIND_BIDI, DIR_BIDI, MSG_EVENT, MSG_COMMAND, CHANNEL_WIFI
 
 # WiFi AP configuration - read from private.py with defaults
 try:
@@ -45,7 +45,6 @@ except Exception:
     AP_CHANNEL = 3
 
 AP_LISTEN_PORT = 8080
-HEADER_LEN = 16  # Shared key header length
 
 # config stuff
 _CONF_FILE = "config.json"
@@ -455,16 +454,14 @@ class WiFiServer:
         """Handle outbound messages from the host.
 
         MSG_COMMAND payload: peer_index:u8 + message:string
-        MSG_PEER_ADD payload: mac:6-bytes + lmk:16-bytes (optional)
-        MSG_PEER_DEL payload: mac:6-bytes
-        
+
         Returns:
             1 on success
             0 if no clients or general failure
             negative on specific errors
         """
         print("WiFiServer: Outbound msg_type=%d, payload_len=%d" % (msg_type, len(payload)))
-        
+
         if msg_type == MSG_COMMAND:
             if len(payload) < 1:
                 print("WiFiServer: ERROR - no peer index")
@@ -475,46 +472,25 @@ class WiFiServer:
 
             # Get list of connected client addresses
             client_addrs = list(self.clients.keys())
-            
+
             if not client_addrs:
                 print("WiFiServer: ERROR - no clients connected")
                 return -2
-            
+
             if peer_index >= len(client_addrs):
-                print("WiFiServer: ERROR - invalid peer index %d (max %d)" % 
+                print("WiFiServer: ERROR - invalid peer index %d (max %d)" %
                       (peer_index, len(client_addrs) - 1))
                 return -3
 
             addr = client_addrs[peer_index]
-            full_message = self.shared_key[:HEADER_LEN] + message.encode()
+            # Send peer_index + message (no shared key)
+            full_message = bytes([peer_index]) + message.encode()
 
             print("WiFiServer: Sending to peer %d (%s): %s" % (peer_index, str(addr), message))
 
             result = self._send_to_client(addr, full_message)
             return result
 
-        elif msg_type == MSG_PEER_ADD:
-            if len(payload) < 6:
-                print("WiFiServer: ERROR - peer_add requires 6 bytes")
-                return -4
-
-            mac = bytes(payload[:6])
-            print("WiFiServer: Authorizing MAC %s" % mac.hex())
-
-            result = self.enableNode(mac)
-            return result
-
-        elif msg_type == MSG_PEER_DEL:
-            if len(payload) < 6:
-                print("WiFiServer: ERROR - peer_del requires 6 bytes")
-                return -4
-
-            mac = bytes(payload[:6])
-            print("WiFiServer: De-authorizing MAC %s" % mac.hex())
-
-            result = self.disableNode(mac)
-            return result
-        
         print("WiFiServer: ERROR - unknown msg_type %d" % msg_type)
         return 0
 

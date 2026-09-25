@@ -383,7 +383,9 @@ class TUI:
         self.input_peer = 0
         self.input_mode = False
         self.last_action = ""
-        self._load_peers_from_file()
+        # Only load peers for ESP-NOW mode (WiFi doesn't use MAC-based peers)
+        if not use_wifi:
+            self._load_peers_from_file()
 
     def _load_peers_from_file(self):
         """Load peers from peers.json (but don't send to device yet)."""
@@ -453,7 +455,9 @@ class TUI:
             MSG_CHANNEL_LIST_REQUEST,
         )
         self.send_control(CTRL_GET_STATUS)
-        self._send_peers_to_device()
+        # Only send peers for ESP-NOW mode
+        if not self.use_wifi:
+            self._send_peers_to_device()
 
     def send_espnow_message(self, peer_index, message):
         """Send a message to a specific peer via wireless channel (ESP-NOW or WiFi).
