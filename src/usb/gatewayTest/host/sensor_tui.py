@@ -672,8 +672,9 @@ class TUI:
                     # Handle input mode
                     if key in (ord("\n"), curses.KEY_ENTER):
                         # Send message
-                        if self.input_text.strip() and self.peers:
-                            self.send_espnow_message(self.input_peer, self.input_text.strip())
+client_list = self.wifi_clients if self.use_wifi else self.peers
+                    if self.input_text.strip() and client_list:
+                        self.send_espnow_message(self.input_peer, self.input_text.strip())
                         self.input_text = ""
                         self.input_mode = False
                         curses.curs_set(0)
