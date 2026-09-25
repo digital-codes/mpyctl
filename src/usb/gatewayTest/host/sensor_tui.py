@@ -484,6 +484,9 @@ class TUI:
             MSG_CHANNEL_LIST_REQUEST,
         )
         self.send_control(CTRL_GET_STATUS)
+        # Request WiFi client list in WiFi mode
+        if self.use_wifi:
+            self.request_wifi_clients()
         # Only send peers for ESP-NOW mode
         if not self.use_wifi:
             self._send_peers_to_device()
