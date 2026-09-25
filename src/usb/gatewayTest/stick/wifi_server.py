@@ -166,9 +166,10 @@ class WiFiServer:
         print("WiFiServer: AP MAC:", self.mac.hex())
         
         # Configure AP with SSID, password, and channel
-        print("WiFiServer: Configuring AP with ssid='%s', password='%s', channel=%d" % 
+        print("WiFiServer: Configuring AP with ssid='%s', password='%s', channel=%d" %
               (self.ssid, self.password, self.wifi_channel))
         self.ap.config(essid=self.ssid, password=self.password, channel=self.wifi_channel, authmode=3)
+        self.ap.config(max_clients=10)
         
         # Activate AP
         self.ap.active(True)
@@ -579,10 +580,15 @@ class WiFiServer:
         return len(self.clients)
 
     def get_client_list(self):
-        """Return list of connected clients as strings."""
+        """Return list of connected clients with IP address."""
         result = []
         for addr, (sock, mac) in self.clients.items():
-            result.append({"addr": str(addr), "mac": mac.hex() if mac else "unknown"})
+            client_ip = addr[0]  # IP address
+            result.append({
+                "ip": client_ip,
+                "port": addr[1],
+                "mac": mac.hex() if mac else "unknown"
+            })
         return result
 
     def get_authorized_macs(self):
@@ -613,6 +619,7 @@ class WiFiServer:
                 "forward_dropped": self.forward_dropped,
             },
             "clients": self.get_connected_count(),
+            "client_list": self.get_client_list(),
             "authorized_macs": len(self.authorized_macs),
         }
 
