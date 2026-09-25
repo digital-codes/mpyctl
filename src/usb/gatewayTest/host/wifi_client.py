@@ -19,6 +19,7 @@ import sys
 import time
 import os
 import json
+import threading
 
 # Add stick directory to Python path
 stick_path = os.path.join(os.path.dirname(__file__), "..", "stick")
@@ -68,14 +69,16 @@ def load_private_config():
 
 class WiFiClient:
     """TCP client for WiFi server communication."""
-    
+
     def __init__(self, server_ip, port=8080, shared_key=None):
         self.server_ip = server_ip
         self.port = port
         self.socket = None
         self.connected = False
         self.received_count = 0
-        
+        self._receiver_thread = None
+        self._running = False
+
         # Load shared key from config
         if shared_key is None:
             # Try to load from config.json
@@ -106,14 +109,47 @@ class WiFiClient:
             self.socket.settimeout(0.1)  # Short timeout for non-blocking feel
             self.connected = True
             print(f"Connected to {self.server_ip}:{self.port}")
+            self._start_receiver()
             return True
         except Exception as e:
             print(f"Connection failed: {e}")
             self.connected = False
             return False
-    
+
+    def _start_receiver(self):
+        """Start background receiver thread."""
+        self._running = True
+        self._receiver_thread = threading.Thread(target=self._receiver_loop, daemon=True)
+        self._receiver_thread.start()
+
+    def _stop_receiver(self):
+        """Stop background receiver thread."""
+        self._running = False
+        if self._receiver_thread:
+            self._receiver_thread.join(timeout=1)
+
+    def _receiver_loop(self):
+        """Background thread to receive messages immediately."""
+        while self._running and self.connected:
+            try:
+                data = self.socket.recv(1024)
+                if not data:
+                    self.connected = False
+                    break
+                message = data.decode('utf-8', errors='replace')
+                self.received_count += 1
+                print(f"Received: {message}")
+            except socket.timeout:
+                continue
+            except Exception as e:
+                if self._running:
+                    print(f"Receive error: {e}")
+                self.connected = False
+                break
+
     def disconnect(self):
         """Disconnect from the server."""
+        self._stop_receiver()
         if self.socket:
             try:
                 self.socket.close()
@@ -233,16 +269,9 @@ def main():
                 time.sleep(1)
                 client.connect()
                 continue
-            
-            # Check for responses
-            for _ in range(10):  # Check for 1 second
-                response = client.receive_message()
-                if response:
-                    print(f"Received: {response}")
-                time.sleep(0.1)
-            
+
             counter += 1
-            
+
             if counter < args.count:
                 print(f"Waiting {args.interval} seconds...")
                 time.sleep(args.interval)
