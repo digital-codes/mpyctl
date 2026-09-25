@@ -144,6 +144,7 @@ class WiFiServer:
 
         # Register the bidirectional channel
         if self.gateway:
+            print("WiFiServer: Registering channel with gateway...")
             self.gateway.register_channel(
                 channel_id,
                 self.KIND,
@@ -152,6 +153,9 @@ class WiFiServer:
                 name,
                 self._handle_outbound,
             )
+            print("WiFiServer: Channel registered")
+        else:
+            print("WiFiServer: WARNING - No gateway, channel not registered!")
 
     def _init_wifi(self):
         """Initialize WiFi in AP mode."""
