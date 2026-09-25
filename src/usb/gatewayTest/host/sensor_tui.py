@@ -752,7 +752,10 @@ class TUI:
                         self.input_peer = 0
                         curses.curs_set(1)
                     else:
-                        self.last_error = "No peers configured"
+                        if self.use_wifi:
+                            self.last_error = "No WiFi clients connected"
+                        else:
+                            self.last_error = "No peers configured"
                 elif key in self.COLORS:
                     self.gateway.send(
                         CHANNEL_RGB,
