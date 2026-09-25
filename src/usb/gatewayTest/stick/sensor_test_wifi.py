@@ -150,7 +150,6 @@ def stats():
         print("  Server port: %s" % w["server"]["port"])
         print("  Listening: %s" % w["server"]["listening"])
         print("  Clients: %s" % w["clients"])
-        print("  Authorized MACs: %s" % w["authorized_macs"])
         print("  Connected: %s" % w["stats"]["connected"])
         print("  Disconnected: %s" % w["stats"]["disconnected"])
         print("  Received: %s" % w["stats"]["received"])

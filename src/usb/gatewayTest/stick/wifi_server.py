@@ -596,7 +596,6 @@ class WiFiServer:
             },
             "clients": self.get_connected_count(),
             "client_list": self.get_client_list(),
-            "authorized_macs": len(self.authorized_macs),
         }
 
 
