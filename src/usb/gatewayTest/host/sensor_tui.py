@@ -455,13 +455,13 @@ class TUI:
             self.send_control(CTRL_GET_WIFI_CLIENTS)
 
     def _parse_wifi_clients(self, payload):
-        """Parse WiFi client list from device response."""
+        """Parse WiFi client list from device response - merge with existing."""
         if not payload:
             return
         try:
             count = payload[0]
             pos = 1
-            client_ips = []
+            synced_clients = []
             for _ in range(count):
                 ip_len = payload[pos]
                 pos += 1
@@ -471,8 +471,11 @@ class TUI:
                 pos += 1
                 mac = payload[pos:pos + mac_len].decode()
                 pos += mac_len
-                client_ips.append(ip)
-            self.wifi_clients = client_ips
+                synced_clients.append(ip)
+            # Merge: add synced clients if not already tracked from messages
+            for ip in synced_clients:
+                if ip not in self.wifi_clients:
+                    self.wifi_clients.append(ip)
         except Exception as e:
             pass  # Ignore parse errors
 
