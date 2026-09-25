@@ -122,22 +122,21 @@ class WiFiClient:
             self.socket = None
         self.connected = False
     
-    def send_message(self, message, peer_index=0):
-        """Send a message with peer index (no shared key - WPA security)."""
+    def send_message(self, message):
+        """Send a message to the server (no peer index)."""
         if not self.connected or not self.socket:
             return False
 
         try:
             if isinstance(message, str):
                 message = message.encode()
-            payload = bytes([peer_index]) + message
-            self.socket.send(payload)
+            self.socket.send(message)
             return True
         except Exception as e:
             print(f"Send error: {e}")
             self.connected = False
             return False
-    
+
     def receive_message(self):
         """Check for and receive a message."""
         if not self.connected or not self.socket:
@@ -150,19 +149,15 @@ class WiFiClient:
                 self.connected = False
                 return None
 
-            # WiFi: message is peer_index(1) + data
-            if len(data) >= 1:
-                peer_index = data[0]
-                message = data[1:]
-                self.received_count += 1
-                return message.decode('utf-8', errors='replace')
-            return None
+            # WiFi: plain message
+            message = data.decode('utf-8', errors='replace')
+            self.received_count += 1
+            return message
         except socket.timeout:
             return None
         except Exception as e:
             print(f"Receive error: {e}")
             self.connected = False
-            return None
             return None
 
 

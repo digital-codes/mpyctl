@@ -99,17 +99,16 @@ def connect_to_server():
         return False
 
 # Peer index for this client (assign manually or from config)
-MY_PEER_INDEX = 0
 
 
 def send_message(message):
-    """Send a message to the server with peer index (no shared key - WPA security)."""
+    """Send a message to the server (no peer index)."""
     global sock
     if sock is None:
         return False
 
     try:
-        payload = bytes([MY_PEER_INDEX]) + message.encode()
+        payload = message.encode()
         sock.send(payload)
         return True
     except Exception as e:
@@ -126,14 +125,9 @@ def receive_messages():
         sock.setblocking(False)
         data = sock.recv(1024)
         if data:
-            # WiFi: message is peer_index(1) + data
-            if len(data) >= 1:
-                peer_index = data[0]
-                message = data[1:]
-                print("\n*** Received from server ***")
-                print("    Peer index:", peer_index)
-                print("    Data:", message.decode('utf-8'))
-                received_count += 1
+            message = data.decode('utf-8')
+            print("Received from server:", message)
+            received_count += 1
     except OSError:
         pass  # No data available
     except Exception as e:

@@ -470,7 +470,8 @@ class WiFiServer:
             0 if no clients or general failure
             negative on specific errors
         """
-        print("WiFiServer: Outbound msg_type=%d, payload_len=%d" % (msg_type, len(payload)))
+        if self.debug:
+            print("WiFiServer: Outbound msg_type=%d, payload_len=%d" % (msg_type, len(payload)))
 
         if msg_type == MSG_COMMAND:
             if len(payload) < 1:
@@ -487,8 +488,9 @@ class WiFiServer:
                 print("WiFiServer: ERROR - no clients connected")
                 return -2
 
-            print("WiFiServer: DEBUG - client_addrs =", client_addrs)
-            print("WiFiServer: DEBUG - peer_index =", peer_index)
+            if self.debug:
+                print("WiFiServer: DEBUG - client_addrs =", client_addrs)
+                print("WiFiServer: DEBUG - peer_index =", peer_index)
 
             if peer_index >= len(client_addrs):
                 print("WiFiServer: ERROR - invalid peer index %d (max %d)" %
@@ -496,10 +498,11 @@ class WiFiServer:
                 return -3
 
             addr = client_addrs[peer_index]
-            # Send peer_index + message (no shared key)
-            full_message = bytes([peer_index]) + message.encode()
+            # Send message (no peer index)
+            full_message = message.encode()
 
-            print("WiFiServer: Sending to peer %d (%s): %s" % (peer_index, str(addr), message))
+            if self.debug:
+                print("WiFiServer: Sending to peer %d (%s): %s" % (peer_index, str(addr), message))
 
             result = self._send_to_client(addr, full_message)
             return result
