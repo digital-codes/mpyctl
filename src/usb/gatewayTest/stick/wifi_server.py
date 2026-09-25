@@ -614,6 +614,10 @@ class WiFiServer:
             "client_list": self.get_client_list(),
         }
 
+    def set_debug(self, enabled):
+        """Enable/disable debug output."""
+        self.debug = enabled
+
 
 if __name__ == "__main__":
     # Standalone mode: run as WiFi AP server without USB gateway

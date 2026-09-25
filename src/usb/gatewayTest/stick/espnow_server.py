@@ -415,6 +415,10 @@ class ESPNowRadio:
             "radio": self.radio.stats(),
         }
 
+    def set_debug(self, enabled):
+        """Enable/disable debug output."""
+        self.debug = enabled
+
 
 if __name__ == "__main__":
     # channel_id is the USB channel number and unused without a gateway;

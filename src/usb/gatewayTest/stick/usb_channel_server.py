@@ -172,6 +172,11 @@ class USBChannelServer:
         if not self.debug_enabled:
             self.debug_log = []
 
+        for channel_id, channel in self.channels.items():
+            handler = channel.get("handler")
+            if handler and hasattr(handler, "set_debug"):
+                handler.set_debug(enabled)
+
     def dump_debug(self):
         """Print the debug log to the REPL."""
         for entry in self.debug_log:
