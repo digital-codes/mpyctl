@@ -536,9 +536,13 @@ class TUI:
             elif msg_type == MSG_CHANNEL_REMOVED and payload:
                 self.channels.pop(payload[0], None)
             elif msg_type == MSG_STATUS:
-                # Check if it's WiFi client list (variable length) or gateway status (28 bytes)
-                if self.use_wifi and len(payload) > 0 and payload[0] <= 20 and len(payload) < 100:
-                    # Likely WiFi client list response
+                # Check if it's gateway status (exactly 28 bytes) or WiFi client list (variable)
+                if self.use_wifi and len(payload) == 28 and payload[0] in (0, 1):
+                    # Gateway status: debug flag is 0 or 1, followed by interface_open, tx_busy, out_armed
+                    self.gateway_status = parse_status(payload)
+                    self.debug_requested = self.gateway_status["debug"]
+                elif self.use_wifi:
+                    # WiFi client list response
                     self._parse_wifi_clients(payload)
                 else:
                     self.gateway_status = parse_status(payload)
@@ -567,10 +571,10 @@ class TUI:
         if channel == CHANNEL_ESPNOW and msg_type == MSG_EVENT:
             if len(payload) >= 6:
                 if self.use_wifi:
-                    # WiFi: payload = IP(4) + peer_index(1) + message
+                    # WiFi: payload = IP(4) + message (no peer_index)
                     mac = payload[:4].hex()
                     if len(payload) > 4:
-                        data = payload[5:]  # Skip peer_index
+                        data = payload[4:]  # Skip IP, get message
                     else:
                         data = b""
                     rssi_str = ""
