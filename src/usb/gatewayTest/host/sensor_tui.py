@@ -753,6 +753,7 @@ class TUI:
                 elif key == ord("m"):
                     # Enter message mode
                     client_list = self.wifi_clients if self.use_wifi else self.peers
+                    self.last_action = f"'m': wifi={self.use_wifi} cl={client_list}"
                     if client_list:
                         self.input_mode = True
                         self.input_text = ""
