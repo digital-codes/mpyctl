@@ -54,6 +54,7 @@ from channel_defs import (
     CTRL_SET_DEBUG,
     CTRL_GET_STATUS,
     CTRL_CLEAR_DEBUG,
+    CTRL_GET_WIFI_CLIENTS,
     CHANNEL_CONTROL,
     CHANNEL_BUTTON,
     CHANNEL_RGB,
@@ -383,6 +384,7 @@ class TUI:
         self.input_peer = 0
         self.input_mode = False
         self.last_action = ""
+        self._last_wifi_client_sync = 0  # For periodic sync
         # Only load peers for ESP-NOW mode (WiFi doesn't use MAC-based peers)
         if not use_wifi:
             self._load_peers_from_file()
@@ -447,6 +449,33 @@ class TUI:
             payload += bytes((argument,))
         self.gateway.send(CHANNEL_CONTROL, MSG_COMMAND, payload)
 
+    def request_wifi_clients(self):
+        """Request WiFi client list from the device."""
+        if self.use_wifi:
+            self.send_control(CTRL_GET_WIFI_CLIENTS)
+
+    def _parse_wifi_clients(self, payload):
+        """Parse WiFi client list from device response."""
+        if not payload:
+            return
+        try:
+            count = payload[0]
+            pos = 1
+            client_ips = []
+            for _ in range(count):
+                ip_len = payload[pos]
+                pos += 1
+                ip = payload[pos:pos + ip_len].decode()
+                pos += ip_len
+                mac_len = payload[pos]
+                pos += 1
+                mac = payload[pos:pos + mac_len].decode()
+                pos += mac_len
+                client_ips.append(ip)
+            self.wifi_clients = client_ips
+        except Exception as e:
+            pass  # Ignore parse errors
+
     def request_initial_state(self):
         """Ping, fetch the channel list and the gateway status."""
         self.gateway.send(CHANNEL_CONTROL, MSG_PING)
@@ -504,9 +533,14 @@ class TUI:
             elif msg_type == MSG_CHANNEL_REMOVED and payload:
                 self.channels.pop(payload[0], None)
             elif msg_type == MSG_STATUS:
-                self.gateway_status = parse_status(payload)
+                # Check if it's WiFi client list (variable length) or gateway status (28 bytes)
+                if self.use_wifi and len(payload) > 0 and payload[0] <= 20 and len(payload) < 100:
+                    # Likely WiFi client list response
+                    self._parse_wifi_clients(payload)
+                else:
+                    self.gateway_status = parse_status(payload)
+                    self.debug_requested = self.gateway_status["debug"]
                 self.last_action = ""
-                self.debug_requested = self.gateway_status["debug"]
             elif msg_type == MSG_ERROR:
                 related = payload[0] if len(payload) > 0 else -1
                 code = payload[1] if len(payload) > 1 else -1
@@ -661,6 +695,15 @@ class TUI:
 
         while not self.shutdown.is_set():
             self.drain_events()
+
+            # Periodic WiFi client sync (every 5 seconds)
+            if self.use_wifi:
+                import time
+                now = time.time()
+                if now - self._last_wifi_client_sync >= 5:
+                    self._last_wifi_client_sync = now
+                    self.request_wifi_clients()
+
             self.draw(screen)
 
             key = screen.getch()

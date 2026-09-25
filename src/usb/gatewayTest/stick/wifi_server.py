@@ -86,7 +86,7 @@ class WiFiServer:
         
         # Server socket and client connections
         self.server_socket = None
-        self.clients = {}  # addr -> (socket, mac)
+        self.clients = {}  # ip_str -> (socket, mac)
         self.accepting = False
         self.irq_pending = False
         
@@ -227,8 +227,8 @@ class WiFiServer:
         self.accepting = False
 
         # Close all client connections
-        for addr in list(self.clients.keys()):
-            self._close_client(addr)
+        for client_ip in list(self.clients.keys()):
+            self._close_client(client_ip)
 
         # Close server socket
         if self.server_socket:
@@ -244,20 +244,20 @@ class WiFiServer:
             self.timer.deinit()
             self.timer = None
 
-    def _close_client(self, addr):
+    def _close_client(self, client_ip):
         """Close a specific client connection."""
-        if addr in self.clients:
-            sock, mac = self.clients[addr]
+        if client_ip in self.clients:
+            sock, mac = self.clients[client_ip]
             try:
                 self.poller.unregister(sock)
                 sock.close()
             except Exception:
                 pass
-            del self.clients[addr]
+            del self.clients[client_ip]
             self.disconnected += 1
             if self.debug:
                 print("WiFiServer: Client disconnected: %s (mac: %s)" %
-                      (str(addr), mac.hex() if mac else "unknown"))
+                      (str(client_ip), mac.hex() if mac else "unknown"))
 
     def enableNode(self, mac, lmk=None):
         """Authorize a client MAC address to connect.
@@ -292,9 +292,9 @@ class WiFiServer:
         self.authorized_macs.discard(mac_bytes)
         
         # Disconnect if connected - find by MAC
-        for addr, (sock, m) in list(self.clients.items()):
+        for client_ip, (sock, m) in list(self.clients.items()):
             if m == mac_bytes:
-                self._close_client(addr)
+                self._close_client(client_ip)
         
         print("WiFiServer: Removed MAC:", mac_bytes.hex())
         return 1
@@ -325,7 +325,7 @@ class WiFiServer:
 
         # Re-register server socket and all client sockets
         self.poller.register(self.server_socket, select.POLLIN)
-        for addr, (sock, mac) in self.clients.items():
+        for client_ip, (sock, mac) in self.clients.items():
             self.poller.register(sock, select.POLLIN)
 
         # Wait for events
@@ -337,11 +337,11 @@ class WiFiServer:
         for sock, event in events:
             if event & (select.POLLHUP | select.POLLERR):
                 # Find and close the socket
-                for addr, (client_sock, mac) in list(self.clients.items()):
+                for client_ip, (client_sock, mac) in list(self.clients.items()):
                     if client_sock is sock:
                         if self.debug:
-                            print("WiFiServer: Socket error/hup for %s" % str(addr))
-                        self._close_client(addr)
+                            print("WiFiServer: Socket error/hup for %s" % str(client_ip))
+                        self._close_client(client_ip)
                         break
                 continue
 
@@ -357,56 +357,57 @@ class WiFiServer:
                         print("WiFiServer: ERROR - accept:", e)
             else:
                 # Client socket has data
-                for addr, (client_sock, mac) in list(self.clients.items()):
+                for client_ip, (client_sock, mac) in list(self.clients.items()):
                     if client_sock is sock:
-                        self._check_client_data(addr)
+                        self._check_client_data(client_ip)
                         break
 
     def _handle_new_connection(self, sock, addr):
         """Handle a new TCP connection."""
+        client_ip = addr[0]  # Use IP only, not (IP, port)
         if self.debug:
-            print("WiFiServer: New connection from %s" % str(addr))
+            print("WiFiServer: New connection from %s" % str(client_ip))
 
         # Accept all connections initially, verify MAC on first data
-        self.clients[addr] = (sock, None)
+        self.clients[client_ip] = (sock, None)
         self.connected += 1
 
         # Register client socket for reading
         import select
         self.poller.register(sock, select.POLLIN)
 
-    def _check_client_data(self, addr):
+    def _check_client_data(self, client_ip):
         """Check if there's data from a client."""
-        if addr not in self.clients:
+        if client_ip not in self.clients:
             return
 
-        sock, client_mac = self.clients[addr]
+        sock, client_mac = self.clients[client_ip]
         try:
             sock.settimeout(0)  # Non-blocking for MicroPython
             data = sock.recv(1024)
             if data:
-                self._handle_client_data(addr, data)
+                self._handle_client_data(client_ip, data)
             else:
                 # No data - connection closed
                 if self.debug:
-                    print("WiFiServer: Connection closed by client %s" % str(addr))
-                self._close_client(addr)
+                    print("WiFiServer: Connection closed by client %s" % str(client_ip))
+                self._close_client(client_ip)
         except OSError:
             pass  # No data available
         except Exception as e:
             if self.debug:
-                print("WiFiServer: ERROR - reading from %s: %s" % (str(addr), e))
+                print("WiFiServer: ERROR - reading from %s: %s" % (str(client_ip), e))
             self.rx_errors += 1
             self._close_client(addr)
 
-    def _handle_client_data(self, addr, data):
+    def _handle_client_data(self, client_ip, data):
         """Process data received from a client.
 
         Expected format: peer_index(1) + message (no shared key - WPA security)
         """
         if self.debug:
             print("WiFiServer: ============================================")
-            print("WiFiServer: RECEIVED from %s" % str(addr))
+            print("WiFiServer: RECEIVED from %s" % str(client_ip))
             print("WiFiServer: Raw bytes:", data)
             print("WiFiServer: Raw hex:", data.hex())
             print("WiFiServer: Length:", len(data))
@@ -435,7 +436,7 @@ class WiFiServer:
                 print("WiFiServer: Message decode error:", e)
 
         # If MAC is None, use IP as identifier (4 bytes)
-        sock, client_mac = self.clients[addr]
+        sock, client_mac = self.clients[client_ip]
         if client_mac is None:
             # Encode client IP as 4-byte identifier
             ip_parts = addr[0].split('.')
@@ -497,48 +498,48 @@ class WiFiServer:
                       (peer_index, len(client_addrs) - 1))
                 return -3
 
-            addr = client_addrs[peer_index]
+            client_ip = client_addrs[peer_index]
             # Send message (no peer index)
             full_message = message.encode()
 
             if self.debug:
-                print("WiFiServer: Sending to peer %d (%s): %s" % (peer_index, str(addr), message))
+                print("WiFiServer: Sending to peer %d (%s): %s" % (peer_index, str(client_ip), message))
 
-            result = self._send_to_client(addr, full_message)
+            result = self._send_to_client(client_ip, full_message)
             return result
 
         print("WiFiServer: ERROR - unknown msg_type %d" % msg_type)
         return 0
 
-    def _send_to_client(self, addr, message):
+    def _send_to_client(self, client_ip, message):
         """Send a message to a specific client.
-        
+
         Returns:
             1 on success
             0 on failure
         """
-        if addr not in self.clients:
-            print("WiFiServer: ERROR - client not connected: %s" % str(addr))
+        if client_ip not in self.clients:
+            print("WiFiServer: ERROR - client not connected: %s" % str(client_ip))
             return 0
 
         if self.debug:
-            print("WiFiServer: Sending to %s:" % str(addr))
+            print("WiFiServer: Sending to %s:" % str(client_ip))
             print("  Raw bytes:", message)
             print("  Raw hex:", message.hex())
             print("  Length:", len(message))
 
         try:
-            sock, mac = self.clients[addr]
+            sock, mac = self.clients[client_ip]
             sent = sock.send(message)
             if sent == len(message):
                 self.sent += 1
                 if self.debug:
-                    print("WiFiServer: Sent %d bytes to %s" % (sent, str(addr)))
+                    print("WiFiServer: Sent %d bytes to %s" % (sent, str(client_ip)))
                 return 1
             else:
                 if self.debug:
                     print("WiFiServer: ERROR - partial send to %s: %d/%d" %
-                          (str(addr), sent, len(message)))
+                          (str(client_ip), sent, len(message)))
                 self.tx_errors += 1
                 return 0
         except Exception as e:
@@ -557,12 +558,12 @@ class WiFiServer:
         client_addrs = list(self.clients.keys())
         if not client_addrs:
             return 0
-        
+
         success_count = 0
-        for addr in client_addrs:
-            if self._send_to_client(addr, message):
+        for client_ip in client_addrs:
+            if self._send_to_client(client_ip, message):
                 success_count += 1
-        
+
         if success_count != len(client_addrs):
             return success_count - len(client_addrs)
         return success_count
@@ -574,11 +575,9 @@ class WiFiServer:
     def get_client_list(self):
         """Return list of connected clients with IP address."""
         result = []
-        for addr, (sock, mac) in self.clients.items():
-            client_ip = addr[0]  # IP address
+        for client_ip, (sock, mac) in self.clients.items():
             result.append({
                 "ip": client_ip,
-                "port": addr[1],
                 "mac": mac.hex() if mac else "unknown"
             })
         return result

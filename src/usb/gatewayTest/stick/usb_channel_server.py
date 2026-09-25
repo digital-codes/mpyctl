@@ -46,6 +46,8 @@ from channel_defs import (
     CTRL_SET_DEBUG,
     CTRL_GET_STATUS,
     CTRL_CLEAR_DEBUG,
+    CTRL_GET_WIFI_CLIENTS,
+    CHANNEL_WIFI,
 )
 
 _default_gateway = None
@@ -568,6 +570,26 @@ class USBChannelServer:
         if command == CTRL_CLEAR_DEBUG:
             self.clear_debug()
             self.send(CHANNEL_CONTROL, MSG_STATUS, self._encode_status())
+            return
+
+        if command == CTRL_GET_WIFI_CLIENTS:
+            wifi_channel = self.channels.get(CHANNEL_WIFI)
+            if wifi_channel and wifi_channel.get("handler"):
+                handler = wifi_channel["handler"]
+                if hasattr(handler, "get_client_list"):
+                    client_list = handler.get_client_list()
+                    # Encode: count(1) + for each: ip_len(1) + ip_str + mac_len(1) + mac_str
+                    data = bytes([len(client_list)])
+                    for client in client_list:
+                        ip_bytes = client["ip"].encode()
+                        data += bytes([len(ip_bytes)]) + ip_bytes
+                        mac_str = client.get("mac", "unknown")
+                        mac_bytes = mac_str.encode()
+                        data += bytes([len(mac_bytes)]) + mac_bytes
+                    self.send(CHANNEL_CONTROL, MSG_STATUS, data)
+                    return
+            # No WiFi channel or handler - return empty list
+            self.send(CHANNEL_CONTROL, MSG_STATUS, bytes([0]))
             return
 
         self.send_error(CHANNEL_CONTROL, 9, "unknown control command")
