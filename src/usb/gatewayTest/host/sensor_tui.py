@@ -375,6 +375,7 @@ class TUI:
         self.status = "starting"
         self.last_error = ""
         self.esp_messages = []
+        self.wifi_clients = []  # Seen WiFi client IPs
         self.gateway_status = None
         self.debug_requested = False
         self.peers = []
@@ -463,7 +464,13 @@ class TUI:
             self.last_error = "No wireless channel configured (use -e or -w)"
             return False
 
-        if peer_index >= len(self.peers):
+        # Use appropriate client list based on mode
+        if self.use_wifi:
+            client_list = self.wifi_clients
+        else:
+            client_list = self.peers
+
+        if peer_index >= len(client_list):
             self.last_error = f"Invalid peer index {peer_index}"
             return False
 
@@ -529,7 +536,12 @@ class TUI:
                     # Show IP instead of MAC for WiFi
                     try:
                         ip_bytes = bytes.fromhex(mac[:8])
-                        peer_label = f"{ip_bytes[0]}.{ip_bytes[1]}.{ip_bytes[2]}.{ip_bytes[3]}"
+                        client_ip = f"{ip_bytes[0]}.{ip_bytes[1]}.{ip_bytes[2]}.{ip_bytes[3]}"
+                        peer_label = client_ip
+
+                        # Track unique client IPs
+                        if client_ip not in self.wifi_clients:
+                            self.wifi_clients.append(client_ip)
                     except Exception:
                         peer_label = mac
                 else:
@@ -607,16 +619,22 @@ class TUI:
             row += 1
 
         if self.input_mode:
-            if self.peers and 0 <= self.input_peer < len(self.peers):
+            if self.use_wifi:
+                # WiFi mode: use seen client IPs
+                client_list = self.wifi_clients
+            else:
+                # ESP-NOW mode: use peers from file
+                client_list = self.peers
+
+            if client_list and 0 <= self.input_peer < len(client_list):
                 if self.use_wifi:
-                    # For WiFi, show IP instead of MAC
-                    peer = self.peers[self.input_peer]
-                    peer_label = peer.get("ip", peer.get("mac", "unknown"))
+                    peer_label = client_list[self.input_peer]  # IP string
                 else:
-                    peer_label = self.peers[self.input_peer].get("mac", "unknown")
+                    peer_label = client_list[self.input_peer].get("mac", "unknown")
                 line(row, "To peer %d (%s): %s" % (self.input_peer, peer_label, self.input_text))
             else:
-                line(row, "Peer [0-%d]: %s" % (len(self.peers) - 1 if self.peers else 0, self.input_text))
+                count = len(client_list) if client_list else 0
+                line(row, "Peer [0-%d]: %s" % (count - 1 if count > 0 else 0, self.input_text))
             row += 1
             line(row, "Enter=send, Esc=cancel, Up/Down=peer")
         else:
@@ -663,12 +681,14 @@ class TUI:
                         self.input_text = self.input_text[:-1]
                     elif key == curses.KEY_UP:
                         # Previous peer
-                        if self.peers:
-                            self.input_peer = (self.input_peer - 1) % len(self.peers)
+                        client_list = self.wifi_clients if self.use_wifi else self.peers
+                        if client_list:
+                            self.input_peer = (self.input_peer - 1) % len(client_list)
                     elif key == curses.KEY_DOWN:
                         # Next peer
-                        if self.peers:
-                            self.input_peer = (self.input_peer + 1) % len(self.peers)
+                        client_list = self.wifi_clients if self.use_wifi else self.peers
+                        if client_list:
+                            self.input_peer = (self.input_peer + 1) % len(client_list)
                     elif 32 <= key <= 126:
                         # Printable character
                         self.input_text += chr(key)
@@ -676,7 +696,8 @@ class TUI:
                     self.shutdown.set()
                 elif key == ord("m"):
                     # Enter message mode
-                    if self.peers:
+                    client_list = self.wifi_clients if self.use_wifi else self.peers
+                    if client_list:
                         self.input_mode = True
                         self.input_text = ""
                         self.input_peer = 0
