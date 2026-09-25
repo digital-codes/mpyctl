@@ -132,7 +132,7 @@ def receive_messages():
                 message = data[1:]
                 print("\n*** Received from server ***")
                 print("    Peer index:", peer_index)
-                print("    Data:", message.decode('utf-8', errors='replace'))
+                print("    Data:", message.decode('utf-8'))
                 received_count += 1
     except OSError:
         pass  # No data available
