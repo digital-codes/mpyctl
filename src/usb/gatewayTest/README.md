@@ -243,6 +243,75 @@ Keys:
 
 ---
 
+## Dynamic Channel Loading
+
+Sensors can be loaded dynamically at runtime via the `CTRL_LOAD_CHANNEL` control command. The device looks up the channel ID in a registry, imports the corresponding module and instantiates the sensor.
+
+### Host Tool: channel_loader.py
+
+Run with: `python3 host/channel_loader.py <command> [options]`
+
+Commands:
+- `rgb --pin <n>` - Load RGB LED sensor (channel 2)
+- `button --pin <n>` - Load button sensor (channel 1)
+- `espnow` - Load ESP-NOW radio (channel 3)
+- `load --channel-id <n>` - Load any registered channel by ID
+
+Options:
+- `--device-serial <serial>` - Select specific device
+- `--name <name>` - Channel name (optional)
+
+Examples:
+```bash
+python3 host/channel_loader.py rgb --pin 35
+python3 host/channel_loader.py button --pin 41 --name my-button
+python3 host/channel_loader.py espnow
+python3 host/channel_loader.py load --channel-id 2 --pin 35
+```
+
+### Protocol
+
+Request: `CTRL_LOAD_CHANNEL + channel_id(1) + config_bytes`
+
+Config format depends on channel type:
+- RGB (id=2): `pin(1) + name_len(1) + name`
+- Button (id=1): `pin(1) + name_len(1) + name`
+- ESP-NOW (id=3): empty
+
+Response: `MSG_STATUS` on success, `MSG_ERROR` on failure.
+
+### Adding New Channel Types
+
+To register a new channel type for dynamic loading, edit `stick/usb_channel_server.py`:
+
+1. Add a config parser method (e.g., `_parse_my_sensor_config`)
+2. Add an entry to `_channel_registry` mapping channel_id to:
+   - `module`: Python module name to import
+   - `class`: Class name to instantiate
+   - `config_parser`: Method to parse config bytes
+3. Register the parser in `_register_channel_parsers()`
+
+Example:
+```python
+def _parse_my_sensor_config(self, config):
+    return {"channel_id": 4, "param": config[0]}
+
+_channel_registry[4] = {
+    "module": "my_sensor",
+    "class": "MySensor",
+    "config_parser": None,
+}
+
+def _register_channel_parsers(self):
+    self._channel_registry[CHANNEL_RGB]["config_parser"] = self._parse_rgb_config
+    self._channel_registry[CHANNEL_BUTTON]["config_parser"] = self._parse_button_config
+    self._channel_registry[4]["config_parser"] = self._parse_my_sensor_config
+```
+
+The corresponding sensor module (`my_sensor.py`) must exist on the device's filesystem.
+
+---
+
 ## Device Installation
 
 Copy to the board:
@@ -250,11 +319,15 @@ Copy to the board:
 **Required:**
 - `boot.py`
 - `usb_channel_server.py`
-- `button_sensor.py`
-- `rgb_sensor.py`
 - `channel_defs.py` (from common/)
 
-**Choose one:**
+**Sensor modules (required for static loading):**
+- `button_sensor.py` (channel 1)
+- `rgb_sensor.py` (channel 2)
+
+These can also be loaded dynamically via `CTRL_LOAD_CHANNEL` (see Dynamic Channel Loading).
+
+**Choose one wireless mode:**
 - `espnow_server.py` + `sensor_test_espnow.py` (ESP-NOW mode)
 - `wifi_server.py` + `sensor_test_wifi.py` (WiFi mode)
 

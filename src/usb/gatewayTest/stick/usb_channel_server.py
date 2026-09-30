@@ -58,7 +58,11 @@ from channel_defs import (
     CTRL_FS_WRITE,
     CTRL_FS_DELETE,
     CTRL_FS_EXISTS,
+    CTRL_LOAD_CHANNEL,
     CHANNEL_WIFI,
+    CHANNEL_BUTTON,
+    CHANNEL_RGB,
+    CHANNEL_ESPNOW,
 )
 
 _default_gateway = None
@@ -623,6 +627,19 @@ class USBChannelServer:
             self._handle_fs_exists(payload[1:] if len(payload) > 1 else b"")
             return
 
+        if command == CTRL_LOAD_CHANNEL:
+            if len(payload) < 2:
+                self.send_error(CHANNEL_CONTROL, 30, "load_channel requires channel_id + config")
+                return
+            channel_id = payload[1]
+            config = payload[2:]
+            try:
+                self._load_channel(channel_id, config)
+                self.send(CHANNEL_CONTROL, MSG_STATUS, self._encode_status())
+            except Exception as exc:
+                self.send_error(CHANNEL_CONTROL, 31, "load_channel: %s" % repr(exc))
+            return
+
         self.send_error(CHANNEL_CONTROL, 9, "unknown control command")
 
     def _handle_fs_list(self, payload):
@@ -774,3 +791,85 @@ class USBChannelServer:
             "debug_enabled": self.debug_enabled,
             "debug_entries": len(self.debug_log),
         }
+
+    def _parse_rgb_config(self, config):
+        """RGB config: pin(1) + optional name_len(1) + name."""
+        if len(config) < 1:
+            raise ValueError("RGB config requires pin number")
+        pin = config[0]
+        name = "rgb-led"
+        if len(config) >= 2:
+            name_len = config[1]
+            if len(config) >= 2 + name_len:
+                name = config[2:2 + name_len].decode("utf-8")
+        return {"channel_id": CHANNEL_RGB, "pin_number": pin, "name": name}
+
+    def _parse_button_config(self, config):
+        """Button config: pin(1) + optional name_len(1) + name."""
+        if len(config) < 1:
+            raise ValueError("Button config requires pin number")
+        pin = config[0]
+        name = "button"
+        if len(config) >= 2:
+            name_len = config[1]
+            if len(config) >= 2 + name_len:
+                name = config[2:2 + name_len].decode("utf-8")
+        return {"channel_id": CHANNEL_BUTTON, "pin_number": pin, "name": name}
+
+    _channel_registry = {
+        CHANNEL_RGB: {
+            "module": "rgb_sensor",
+            "class": "RGBOutputSensor",
+            "config_parser": None,
+        },
+        CHANNEL_BUTTON: {
+            "module": "button_sensor",
+            "class": "DigitalInputSensor",
+            "config_parser": None,
+        },
+        CHANNEL_ESPNOW: {
+            "module": "espnow_server",
+            "class": "ESPNowRadio",
+            "config_parser": None,
+        },
+    }
+
+    def _register_channel_parsers(self):
+        """Initialize config parsers after class methods are available."""
+        self._channel_registry[CHANNEL_RGB]["config_parser"] = self._parse_rgb_config
+        self._channel_registry[CHANNEL_BUTTON]["config_parser"] = self._parse_button_config
+
+    def _load_channel(self, channel_id, config):
+        """Dynamically import and instantiate a channel by ID.
+
+        channel_id is from channel_defs (CHANNEL_RGB=2, CHANNEL_BUTTON=1, etc.).
+        config is channel-specific bytes parsed by the registered parser.
+
+        Returns the instantiated sensor object on success.
+        """
+        if not hasattr(self, "_channel_registry") or not self._channel_registry[CHANNEL_RGB]["config_parser"]:
+            self._register_channel_parsers()
+
+        entry = self._channel_registry.get(channel_id)
+        if entry is None:
+            raise ValueError("unknown channel id %d" % channel_id)
+
+        parser = entry["config_parser"]
+        if parser is None:
+            kwargs = {}
+        else:
+            kwargs = parser(config)
+
+        module = __import__(entry["module"])
+        cls = getattr(module, entry["class"])
+        sensor = cls(**kwargs)
+
+        if hasattr(sensor, "start"):
+            sensor.start()
+
+        self._debug(
+            "channel_loaded",
+            channel=channel_id,
+            kind=entry["class"],
+        )
+        return sensor
