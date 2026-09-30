@@ -380,6 +380,18 @@ def cmd_cat(args):
             return 1
 
         data = fs_read(gateway, args.path)
+
+        if args.output:
+            with open(args.output, "wb") as f:
+                f.write(data)
+            print("Saved %d bytes to %s" % (len(data), args.output))
+            return 0
+
+        is_binary = b"\x00" in data[:512] or any(b > 127 for b in data[:512])
+        if is_binary:
+            print("Binary file detected (%d bytes). Use -o to save to local file." % len(data))
+            return 1
+
         sys.stdout.buffer.write(data)
         return 0
     except Exception as e:
@@ -484,6 +496,7 @@ Examples:
 
     cat_parser = subparsers.add_parser("cat", help="Read file")
     cat_parser.add_argument("path", help="File path")
+    cat_parser.add_argument("-o", "--output", help="Save to local file instead of stdout")
 
     put_parser = subparsers.add_parser("put", help="Write file")
     put_parser.add_argument("src", help="Local source file")
