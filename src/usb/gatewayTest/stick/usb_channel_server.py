@@ -38,6 +38,12 @@ from channel_defs import (
     MSG_STATUS,
     MSG_PEER_ADD,
     MSG_PEER_DEL,
+    MSG_FS_LIST,
+    MSG_FS_READ,
+    MSG_FS_WRITE,
+    MSG_FS_DELETE,
+    MSG_FS_EXISTS,
+    MSG_FS_RESPONSE,
     KIND_CONTROL,
     DIR_IN,
     DIR_OUT,
@@ -47,6 +53,11 @@ from channel_defs import (
     CTRL_GET_STATUS,
     CTRL_CLEAR_DEBUG,
     CTRL_GET_WIFI_CLIENTS,
+    CTRL_FS_LIST,
+    CTRL_FS_READ,
+    CTRL_FS_WRITE,
+    CTRL_FS_DELETE,
+    CTRL_FS_EXISTS,
     CHANNEL_WIFI,
 )
 
@@ -592,7 +603,100 @@ class USBChannelServer:
             self.send(CHANNEL_CONTROL, MSG_STATUS, bytes([0]))
             return
 
+        if command == CTRL_FS_LIST:
+            self._handle_fs_list(payload[1:] if len(payload) > 1 else b"")
+            return
+
+        if command == CTRL_FS_READ:
+            self._handle_fs_read(payload[1:] if len(payload) > 1 else b"")
+            return
+
+        if command == CTRL_FS_WRITE:
+            self._handle_fs_write(payload[1:] if len(payload) > 1 else b"")
+            return
+
+        if command == CTRL_FS_DELETE:
+            self._handle_fs_delete(payload[1:] if len(payload) > 1 else b"")
+            return
+
+        if command == CTRL_FS_EXISTS:
+            self._handle_fs_exists(payload[1:] if len(payload) > 1 else b"")
+            return
+
         self.send_error(CHANNEL_CONTROL, 9, "unknown control command")
+
+    def _handle_fs_list(self, payload):
+        path = payload.decode("utf-8") if payload else "/"
+        try:
+            entries = os.listdir(path)
+            result = bytearray()
+            for entry in entries:
+                try:
+                    entry_path = path.rstrip("/") + "/" + entry if path != "/" else "/" + entry
+                    stat_info = os.stat(entry_path)
+                    is_dir = (stat_info[0] & 0x4000) != 0
+                    size = stat_info[6] if len(stat_info) > 6 else 0
+                    entry_bytes = entry.encode("utf-8")
+                    result.extend(bytes([len(entry_bytes)]))
+                    result.extend(entry_bytes)
+                    result.extend(bytes([1 if is_dir else 0]))
+                    result.extend(_u32(size))
+                except OSError:
+                    pass
+            self.send(CHANNEL_CONTROL, MSG_FS_RESPONSE, bytes(result))
+        except OSError as e:
+            self.send_error(CHANNEL_CONTROL, 20, "fs_list: %s" % str(e))
+
+    def _handle_fs_read(self, payload):
+        if not payload:
+            self.send_error(CHANNEL_CONTROL, 21, "fs_read: no path")
+            return
+        try:
+            path = payload.decode("utf-8")
+            with open(path, "rb") as f:
+                data = f.read(self.max_payload)
+            self.send(CHANNEL_CONTROL, MSG_FS_RESPONSE, data)
+        except OSError as e:
+            self.send_error(CHANNEL_CONTROL, 22, "fs_read: %s" % str(e))
+
+    def _handle_fs_write(self, payload):
+        if not payload:
+            self.send_error(CHANNEL_CONTROL, 23, "fs_write: no data")
+            return
+        try:
+            parts = payload.split(b"\0", 1)
+            if len(parts) != 2:
+                self.send_error(CHANNEL_CONTROL, 24, "fs_write: format is path\\0data")
+                return
+            path = parts[0].decode("utf-8")
+            data = parts[1]
+            with open(path, "wb") as f:
+                f.write(data)
+            self.send(CHANNEL_CONTROL, MSG_FS_RESPONSE, _u32(len(data)))
+        except OSError as e:
+            self.send_error(CHANNEL_CONTROL, 25, "fs_write: %s" % str(e))
+
+    def _handle_fs_delete(self, payload):
+        if not payload:
+            self.send_error(CHANNEL_CONTROL, 26, "fs_delete: no path")
+            return
+        try:
+            path = payload.decode("utf-8")
+            os.remove(path)
+            self.send(CHANNEL_CONTROL, MSG_FS_RESPONSE, bytes([1]))
+        except OSError as e:
+            self.send_error(CHANNEL_CONTROL, 27, "fs_delete: %s" % str(e))
+
+    def _handle_fs_exists(self, payload):
+        if not payload:
+            self.send_error(CHANNEL_CONTROL, 28, "fs_exists: no path")
+            return
+        try:
+            path = payload.decode("utf-8")
+            exists = os.path.exists(path)
+            self.send(CHANNEL_CONTROL, MSG_FS_RESPONSE, bytes([1 if exists else 0]))
+        except OSError as e:
+            self.send_error(CHANNEL_CONTROL, 29, "fs_exists: %s" % str(e))
 
     def _encode_status(self):
         # debug:u8, interface_open:u8, tx_busy:u8, out_armed:u8,

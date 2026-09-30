@@ -351,6 +351,76 @@ WIFI_KEY = "00112233445566778899aabbccddeeff"
 
 ---
 
+## Filesystem Operations
+
+The gateway supports filesystem operations on the device, similar to `mpremote` commands. These are implemented via the control channel using `MSG_COMMAND` with `CTRL_FS_*` commands.
+
+### Host Tool: fs_test.py
+
+Run with: `python3 host/fs_test.py <command> [options]`
+
+Commands:
+- `ls [path]` - List directory contents (like `mpremote ls`)
+- `cat <path>` - Read file contents (like `mpremote cat`)
+- `put <src> [dst]` - Write local file to device (like `mpremote cp`)
+- `rm <path>` - Delete file from device
+- `exists <path>` - Check if file exists on device
+
+Options:
+- `--serial <serial>` - Select specific device
+
+Examples:
+```bash
+python3 host/fs_test.py ls /                # List root directory
+python3 host/fs_test.py ls /flash           # List flash filesystem
+python3 host/fs_test.py cat /main.py        # Read file contents
+python3 host/fs_test.py put local.py /main.py  # Write file to device
+python3 host/fs_test.py rm /test.py         # Delete file from device
+python3 host/fs_test.py exists /boot.py     # Check if file exists
+```
+
+### Protocol
+
+All filesystem commands use `MSG_COMMAND` on channel 0 (control) with the following format:
+
+```
+Payload: CTRL_FS_* (1 byte) + command-specific data
+Response: MSG_FS_RESPONSE with operation result
+Error: MSG_ERROR on failure
+```
+
+#### CTRL_FS_LIST (0x10)
+- Request: `CTRL_FS_LIST + path string (utf-8)`
+- Response: List of entries, each: `name_len(1) + name + is_dir(1) + size(4)`
+
+#### CTRL_FS_READ (0x11)
+- Request: `CTRL_FS_READ + path string (utf-8)`
+- Response: Raw file contents (up to max_payload bytes)
+
+#### CTRL_FS_WRITE (0x12)
+- Request: `CTRL_FS_WRITE + path string (utf-8) + null byte + data`
+- Response: `bytes_written (u32)`
+
+#### CTRL_FS_DELETE (0x13)
+- Request: `CTRL_FS_DELETE + path string (utf-8)`
+- Response: `1` on success, `0` on failure
+
+#### CTRL_FS_EXISTS (0x14)
+- Request: `CTRL_FS_EXISTS + path string (utf-8)`
+- Response: `1` if exists, `0` if not
+
+### Device Implementation
+
+The filesystem handlers are implemented in `stick/usb_channel_server.py` in the `_handle_fs_*` methods. They use MicroPython's `os` module for filesystem operations:
+- `os.listdir()` - List directory
+- `os.stat()` - Get file info
+- `open(path, "rb")` - Read file
+- `open(path, "wb")` - Write file
+- `os.remove()` - Delete file
+- `os.path.exists()` - Check existence
+
+---
+
 ## Next Steps
 
 - Add sensor base class
