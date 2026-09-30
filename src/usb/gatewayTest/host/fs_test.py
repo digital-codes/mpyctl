@@ -274,21 +274,61 @@ def fs_list(gateway, path="/"):
     return entries
 
 
-def fs_read(gateway, path):
-    """Read file contents from the device."""
-    payload = bytes((CTRL_FS_READ,)) + path.encode("utf-8")
-    gateway.send(CHANNEL_CONTROL, MSG_COMMAND, payload)
-    return gateway.read_response()
+MAX_CHUNK_SIZE = 960
+
+
+def _u32(value):
+    return bytes((value & 0xFF, (value >> 8) & 0xFF, (value >> 16) & 0xFF, (value >> 24) & 0xFF))
+
+
+def fs_read(gateway, path, max_size=None):
+    """Read file contents from the device, handling large files in chunks."""
+    path_bytes = path.encode("utf-8")
+    offset = 0
+    result = bytearray()
+
+    while True:
+        size = MAX_CHUNK_SIZE
+        if max_size is not None:
+            remaining = max_size - offset
+            if remaining <= 0:
+                break
+            size = min(size, remaining)
+
+        extra = _u32(offset) + _u32(size)
+        payload = bytes((CTRL_FS_READ,)) + path_bytes + b"\0" + extra
+        gateway.send(CHANNEL_CONTROL, MSG_COMMAND, payload)
+        data = gateway.read_response()
+
+        if not data:
+            break
+        result.extend(data)
+
+        if len(data) < size:
+            break
+        offset += len(data)
+
+    return bytes(result)
 
 
 def fs_write(gateway, path, data):
-    """Write data to a file on the device."""
-    payload = bytes((CTRL_FS_WRITE,)) + path.encode("utf-8") + b"\0" + data
-    gateway.send(CHANNEL_CONTROL, MSG_COMMAND, payload)
-    response = gateway.read_response()
-    if len(response) >= 4:
-        return int.from_bytes(response[:4], "little")
-    return 0
+    """Write data to a file on the device, chunking if necessary."""
+    path_bytes = path.encode("utf-8")
+    total_written = 0
+    offset = 0
+
+    while offset < len(data):
+        chunk = data[offset:offset + MAX_CHUNK_SIZE]
+        offset_bytes = _u32(offset)
+        payload = bytes((CTRL_FS_WRITE,)) + path_bytes + b"\0" + offset_bytes + chunk
+        gateway.send(CHANNEL_CONTROL, MSG_COMMAND, payload)
+        response = gateway.read_response()
+        if len(response) >= 4:
+            written = int.from_bytes(response[:4], "little")
+            total_written += written
+        offset += len(chunk)
+
+    return total_written
 
 
 def fs_delete(gateway, path):

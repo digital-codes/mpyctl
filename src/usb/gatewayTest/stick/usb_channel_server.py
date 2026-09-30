@@ -652,9 +652,19 @@ class USBChannelServer:
             self.send_error(CHANNEL_CONTROL, 21, "fs_read: no path")
             return
         try:
-            path = payload.decode("utf-8")
+            parts = payload.split(b"\0", 1)
+            path = parts[0].decode("utf-8")
+            offset = 0
+            size = self.max_payload
+            if len(parts) > 1:
+                extra = parts[1]
+                if len(extra) >= 4:
+                    offset = int.from_bytes(extra[:4], "little")
+                if len(extra) >= 8:
+                    size = int.from_bytes(extra[4:8], "little")
             with open(path, "rb") as f:
-                data = f.read(self.max_payload)
+                f.seek(offset)
+                data = f.read(size)
             self.send(CHANNEL_CONTROL, MSG_FS_RESPONSE, data)
         except OSError as e:
             self.send_error(CHANNEL_CONTROL, 22, "fs_read: %s" % str(e))
@@ -668,9 +678,16 @@ class USBChannelServer:
             if len(parts) != 2:
                 self.send_error(CHANNEL_CONTROL, 24, "fs_write: format is path\\0data")
                 return
+            header_and_data = parts[1]
+            offset = 0
+            if len(header_and_data) >= 4:
+                offset = int.from_bytes(header_and_data[:4], "little")
+                data = header_and_data[4:]
+            else:
+                data = header_and_data
             path = parts[0].decode("utf-8")
-            data = parts[1]
-            with open(path, "wb") as f:
+            mode = "ab" if offset > 0 else "wb"
+            with open(path, mode) as f:
                 f.write(data)
             self.send(CHANNEL_CONTROL, MSG_FS_RESPONSE, _u32(len(data)))
         except OSError as e:
