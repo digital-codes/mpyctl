@@ -309,7 +309,7 @@ def fs_exists(gateway, path):
 
 def cmd_ls(args):
     """Execute ls command."""
-    gateway = USBGateway(serial=args.serial)
+    gateway = USBGateway(serial=args.device_serial)
     try:
         gateway.open()
         if not gateway.ping():
@@ -332,7 +332,7 @@ def cmd_ls(args):
 
 def cmd_cat(args):
     """Execute cat command."""
-    gateway = USBGateway(serial=args.serial)
+    gateway = USBGateway(serial=args.device_serial)
     try:
         gateway.open()
         if not gateway.ping():
@@ -353,7 +353,7 @@ def cmd_put(args):
     """Execute put command (write local file to device)."""
     dest = args.dest if args.dest else os.path.basename(args.src)
 
-    gateway = USBGateway(serial=args.serial)
+    gateway = USBGateway(serial=args.device_serial)
     try:
         gateway.open()
         if not gateway.ping():
@@ -375,7 +375,7 @@ def cmd_put(args):
 
 def cmd_rm(args):
     """Execute rm command (delete file from device)."""
-    gateway = USBGateway(serial=args.serial)
+    gateway = USBGateway(serial=args.device_serial)
     try:
         gateway.open()
         if not gateway.ping():
@@ -397,7 +397,7 @@ def cmd_rm(args):
 
 def cmd_exists(args):
     """Execute exists command."""
-    gateway = USBGateway(serial=args.serial)
+    gateway = USBGateway(serial=args.device_serial)
     try:
         gateway.open()
         if not gateway.ping():
@@ -433,8 +433,8 @@ Examples:
         """,
     )
     parser.add_argument(
-        "--serial",
-        help="Device serial number (if multiple devices)",
+        "--device-serial",
+        help="Device serial number from USB descriptor (if multiple devices)",
     )
 
     subparsers = parser.add_subparsers(dest="command", required=True)
