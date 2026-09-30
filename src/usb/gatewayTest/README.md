@@ -438,6 +438,7 @@ Commands:
 - `put <src> [dst]` - Write local file to device (like `mpremote cp`)
 - `rm <path>` - Delete file from device
 - `exists <path>` - Check if file exists on device
+- `reset` - Reset the device via `machine.reset()`
 
 Options:
 - `--device-serial <serial>` - Select specific device by USB serial number
@@ -452,6 +453,7 @@ python3 host/fs_test.py put local.py /main.py  # Write file to device
 python3 host/fs_test.py put local.bin /data.bin  # Write binary file (images, etc)
 python3 host/fs_test.py rm /test.py         # Delete file from device
 python3 host/fs_test.py exists /boot.py     # Check if file exists
+python3 host/fs_test.py reset               # Reset the device
 ```
 
 ### Protocol
@@ -485,6 +487,11 @@ Error: MSG_ERROR on failure
 #### CTRL_FS_EXISTS (0x14)
 - Request: `CTRL_FS_EXISTS + path string (utf-8)`
 - Response: `1` if exists, `0` if not
+
+#### CTRL_RESET (0x21)
+- Request: `CTRL_RESET`
+- Response: `MSG_STATUS` immediately before reset
+- Effect: Calls `machine.reset()` on the device
 
 ### Binary File Support
 

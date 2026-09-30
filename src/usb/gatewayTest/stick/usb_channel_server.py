@@ -59,6 +59,7 @@ from channel_defs import (
     CTRL_FS_DELETE,
     CTRL_FS_EXISTS,
     CTRL_LOAD_CHANNEL,
+    CTRL_RESET,
     CHANNEL_WIFI,
     CHANNEL_BUTTON,
     CHANNEL_RGB,
@@ -638,6 +639,15 @@ class USBChannelServer:
                 self.send(CHANNEL_CONTROL, MSG_STATUS, self._encode_status())
             except Exception as exc:
                 self.send_error(CHANNEL_CONTROL, 31, "load_channel: %s" % repr(exc))
+            return
+
+        if command == CTRL_RESET:
+            self.send(CHANNEL_CONTROL, MSG_STATUS, self._encode_status())
+            try:
+                import machine
+                machine.reset()
+            except Exception as exc:
+                self.send_error(CHANNEL_CONTROL, 32, "reset: %s" % repr(exc))
             return
 
         self.send_error(CHANNEL_CONTROL, 9, "unknown control command")

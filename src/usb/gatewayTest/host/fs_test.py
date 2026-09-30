@@ -45,6 +45,7 @@ from channel_defs import (
     CTRL_FS_WRITE,
     CTRL_FS_DELETE,
     CTRL_FS_EXISTS,
+    CTRL_RESET,
 )
 
 VID = 0x303A
@@ -469,6 +470,22 @@ def cmd_exists(args):
         gateway.close()
 
 
+def cmd_reset(args):
+    """Reset the device via machine.reset()."""
+    gateway = USBGateway(serial=args.device_serial)
+    try:
+        gateway.open()
+        payload = bytes((CTRL_RESET,))
+        gateway.send(CHANNEL_CONTROL, MSG_COMMAND, payload)
+        print("Reset command sent")
+        return 0
+    except Exception as e:
+        print("Reset issued (device may be disconnecting): %s" % e)
+        return 0
+    finally:
+        gateway.close()
+
+
 def main():
     """Entry point."""
     parser = argparse.ArgumentParser(
@@ -483,6 +500,7 @@ Examples:
   %(prog)s put local.py /main.py - Write file to device
   %(prog)s rm /test.py         - Delete file from device
   %(prog)s exists /boot.py     - Check if file exists
+  %(prog)s reset               - Reset the device
         """,
     )
     parser.add_argument(
@@ -509,6 +527,8 @@ Examples:
     exists_parser = subparsers.add_parser("exists", help="Check file exists")
     exists_parser.add_argument("path", help="File path")
 
+    subparsers.add_parser("reset", help="Reset the device")
+
     args = parser.parse_args()
 
     if args.command == "ls":
@@ -521,6 +541,8 @@ Examples:
         return cmd_rm(args)
     elif args.command == "exists":
         return cmd_exists(args)
+    elif args.command == "reset":
+        return cmd_reset(args)
     else:
         parser.print_help()
         return 1
