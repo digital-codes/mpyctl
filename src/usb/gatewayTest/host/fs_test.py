@@ -478,7 +478,8 @@ def main():
 Examples:
   %(prog)s ls /                - List root directory
   %(prog)s ls /flash           - List flash filesystem
-  %(prog)s cat /main.py        - Read file contents
+  %(prog)s cat /main.py        - Read file to stdout
+  %(prog)s cat /main.py -o local.py - Read file to local file
   %(prog)s put local.py /main.py - Write file to device
   %(prog)s rm /test.py         - Delete file from device
   %(prog)s exists /boot.py     - Check if file exists

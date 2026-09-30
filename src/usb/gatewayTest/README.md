@@ -353,7 +353,7 @@ WIFI_KEY = "00112233445566778899aabbccddeeff"
 
 ## Filesystem Operations
 
-The gateway supports filesystem operations on the device, similar to `mpremote` commands. These are implemented via the control channel using `MSG_COMMAND` with `CTRL_FS_*` commands.
+The gateway supports filesystem operations on the device, similar to `mpremote` commands. These are implemented via the control channel using `MSG_COMMAND` with `CTRL_FS_*` commands. Large files are transferred in 960-byte chunks.
 
 ### Host Tool: fs_test.py
 
@@ -361,20 +361,22 @@ Run with: `python3 host/fs_test.py <command> [options]`
 
 Commands:
 - `ls [path]` - List directory contents (like `mpremote ls`)
-- `cat <path>` - Read file contents (like `mpremote cat`)
+- `cat <path> [-o <file>]` - Read file contents (like `mpremote cat`)
 - `put <src> [dst]` - Write local file to device (like `mpremote cp`)
 - `rm <path>` - Delete file from device
 - `exists <path>` - Check if file exists on device
 
 Options:
-- `--serial <serial>` - Select specific device
+- `--device-serial <serial>` - Select specific device by USB serial number
 
 Examples:
 ```bash
 python3 host/fs_test.py ls /                # List root directory
 python3 host/fs_test.py ls /flash           # List flash filesystem
-python3 host/fs_test.py cat /main.py        # Read file contents
+python3 host/fs_test.py cat /main.py        # Read text file to stdout
+python3 host/fs_test.py cat /image.bin -o local.bin  # Save binary file locally
 python3 host/fs_test.py put local.py /main.py  # Write file to device
+python3 host/fs_test.py put local.bin /data.bin  # Write binary file (images, etc)
 python3 host/fs_test.py rm /test.py         # Delete file from device
 python3 host/fs_test.py exists /boot.py     # Check if file exists
 ```
@@ -394,12 +396,14 @@ Error: MSG_ERROR on failure
 - Response: List of entries, each: `name_len(1) + name + is_dir(1) + size(4)`
 
 #### CTRL_FS_READ (0x11)
-- Request: `CTRL_FS_READ + path string (utf-8)`
+- Request: `CTRL_FS_READ + path + null + offset(4) + size(4)`
 - Response: Raw file contents (up to max_payload bytes)
+- Large files are read in 960-byte chunks by the host
 
 #### CTRL_FS_WRITE (0x12)
-- Request: `CTRL_FS_WRITE + path string (utf-8) + null byte + data`
+- Request: `CTRL_FS_WRITE + path + null + offset(4) + data`
 - Response: `bytes_written (u32)`
+- Large files are written in 960-byte chunks, appended sequentially
 
 #### CTRL_FS_DELETE (0x13)
 - Request: `CTRL_FS_DELETE + path string (utf-8)`
@@ -409,13 +413,20 @@ Error: MSG_ERROR on failure
 - Request: `CTRL_FS_EXISTS + path string (utf-8)`
 - Response: `1` if exists, `0` if not
 
+### Binary File Support
+
+- `put` automatically handles binary files (images, etc.)
+- `cat` detects binary files and refuses to output to terminal (use `-o` to save)
+- Device uses binary file modes (`rb`, `wb`, `ab`)
+
 ### Device Implementation
 
 The filesystem handlers are implemented in `stick/usb_channel_server.py` in the `_handle_fs_*` methods. They use MicroPython's `os` module for filesystem operations:
 - `os.listdir()` - List directory
 - `os.stat()` - Get file info
 - `open(path, "rb")` - Read file
-- `open(path, "wb")` - Write file
+- `open(path, "wb")` - Write file (truncates)
+- `open(path, "ab")` - Append to file
 - `os.remove()` - Delete file
 - `os.path.exists()` - Check existence
 
