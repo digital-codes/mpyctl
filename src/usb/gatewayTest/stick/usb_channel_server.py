@@ -815,7 +815,7 @@ class USBChannelServer:
             name_len = config[1]
             if len(config) >= 2 + name_len:
                 name = config[2:2 + name_len].decode("utf-8")
-        return {"channel_id": CHANNEL_RGB, "pin_number": pin, "name": name}
+        return {"pin_number": pin, "name": name}
 
     def _parse_button_config(self, config):
         """Button config: pin(1) + optional name_len(1) + name."""
@@ -827,7 +827,7 @@ class USBChannelServer:
             name_len = config[1]
             if len(config) >= 2 + name_len:
                 name = config[2:2 + name_len].decode("utf-8")
-        return {"channel_id": CHANNEL_BUTTON, "pin_number": pin, "name": name}
+        return {"pin_number": pin, "name": name}
 
     _channel_registry = {
         CHANNEL_RGB: {
