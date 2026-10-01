@@ -18,6 +18,7 @@
 from button_sensor import DigitalInputSensor
 from rgb_sensor import RGBOutputSensor
 from espnow_server import ESPNowRadio
+from channel_defs import CHANNEL_ESPNOW, CHANNEL_RGB, CHANNEL_BUTTON
 
 button = None
 rgb = None
@@ -38,14 +39,14 @@ def run(items = ("button", "rgb", "radio")):
 
     try:
         if "button" in items and button is None:
-            button = DigitalInputSensor(1, 41, timer_id=1)
+            button = DigitalInputSensor(CHANNEL_BUTTON, 41, timer_id=1)
             created.append(button)
         if "rgb" in items and rgb is None:
-            rgb = RGBOutputSensor(2, 35)
+            rgb = RGBOutputSensor(CHANNEL_RGB, 35)
             created.append(rgb)
 
         if "radio" in items and radio is None:
-            radio = ESPNowRadio(3)
+            radio = ESPNowRadio(CHANNEL_ESPNOW)
             created.append(radio)
 
         if button is not None:

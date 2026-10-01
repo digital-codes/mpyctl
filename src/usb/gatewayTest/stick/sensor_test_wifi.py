@@ -18,7 +18,7 @@
 from button_sensor import DigitalInputSensor
 from rgb_sensor import RGBOutputSensor
 from wifi_server import WiFiServer
-from channel_defs import CHANNEL_WIFI
+from channel_defs import CHANNEL_RGB, CHANNEL_BUTTON, CHANNEL_WIFI
 import time
 
 button = None
@@ -43,11 +43,11 @@ def run(items=("button", "rgb", "wifi"), debug=False):
     try:
         if "button" in items and button is None:
             print("sensor_test_wifi: Creating button sensor on channel 1, GPIO41")
-            button = DigitalInputSensor(1, 41, timer_id=1)
+            button = DigitalInputSensor(CHANNEL_BUTTON, 41, timer_id=1)
             created.append(button)
         if "rgb" in items and rgb is None:
             print("sensor_test_wifi: Creating RGB sensor on channel 2, GPIO35")
-            rgb = RGBOutputSensor(2, 35)
+            rgb = RGBOutputSensor(CHANNEL_RGB, 35)
             created.append(rgb)
 
         if "wifi" in items and wifi is None:
