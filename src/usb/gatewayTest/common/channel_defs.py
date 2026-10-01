@@ -44,7 +44,7 @@ CHANNEL_CONTROL = 0
 CHANNEL_BUTTON = 1
 CHANNEL_RGB = 2
 CHANNEL_ESPNOW = 3
-CHANNEL_WIFI = 3  # Same as ESP-NOW - uses same channel number
+CHANNEL_WIFI = 4  # must not be used concurrently with ESP-NOW
 
 CTRL_SET_DEBUG = 0x01
 CTRL_GET_STATUS = 0x02
