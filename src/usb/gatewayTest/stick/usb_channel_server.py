@@ -845,6 +845,11 @@ class USBChannelServer:
             "class": "ESPNowRadio",
             "config_parser": None,
         },
+        CHANNEL_WIFI: {
+            "module": "wifi_server",
+            "class": "WiFiRadio",
+            "config_parser": None,
+        },
     }
 
     def _register_channel_parsers(self):

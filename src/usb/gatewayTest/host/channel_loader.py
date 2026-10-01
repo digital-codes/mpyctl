@@ -9,6 +9,7 @@ Usage:
   python3 host/channel_loader.py rgb --pin 35
   python3 host/channel_loader.py button --pin 41
   python3 host/channel_loader.py espnow
+  python3 host/channel_loader.py wifi
 
 Or specify the channel id directly:
   python3 host/channel_loader.py load --channel-id 2 --pin 35
@@ -36,6 +37,7 @@ from channel_defs import (
     CHANNEL_RGB,
     CHANNEL_ESPNOW,
     CTRL_LOAD_CHANNEL,
+    CHANNEL_WIFI,
 )
 
 VID = 0x303A
@@ -301,6 +303,13 @@ def cmd_espnow(args):
     args.pin = None
     return cmd_load(args)
 
+def cmd_wifi(args):
+    """Load Wi-Fi channel (no config required)."""
+    args.channel_id = CHANNEL_WIFI
+    args.pin = None
+    return cmd_load(args)
+
+
 
 def main():
     """Entry point."""
@@ -312,6 +321,7 @@ Examples:
   %(prog)s rgb --pin 35                  - Load RGB sensor on GPIO35
   %(prog)s button --pin 41               - Load button sensor on GPIO41
   %(prog)s espnow                        - Load ESP-NOW radio
+  %(prog)s wifi                          - Load Wi-Fi radio
   %(prog)s load --channel-id 2 --pin 35  - Load by channel id
         """,
     )
@@ -332,6 +342,8 @@ Examples:
 
     esp_parser = subparsers.add_parser("espnow", help="Load ESP-NOW radio")
 
+    wifi_parser = subparsers.add_parser("wifi", help="Load Wi-Fi radio")
+
     load_parser = subparsers.add_parser("load", help="Load by channel id")
     load_parser.add_argument("--channel-id", type=int, required=True)
     load_parser.add_argument("--pin", type=int)
@@ -345,6 +357,8 @@ Examples:
         return cmd_button(args)
     elif args.command == "espnow":
         return cmd_espnow(args)
+    elif args.command == "wifi":
+        return cmd_wifi(args)
     elif args.command == "load":
         return cmd_load(args)
     else:
