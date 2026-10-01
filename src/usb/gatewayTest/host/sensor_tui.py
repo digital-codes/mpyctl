@@ -376,7 +376,7 @@ class TUI:
         self.status = "starting"
         self.last_error = ""
         self.esp_messages = []
-        self.wifi_clients = []  # Seen WiFi client IPs
+        self.wifi_clients = []  # Seen WiFi client device IDs
         self.gateway_status = None
         self.debug_requested = False
         self.peers = []
@@ -467,18 +467,23 @@ class TUI:
                 pos += 1
                 ip = payload[pos:pos + ip_len].decode()
                 pos += ip_len
+                # Read device_id
+                device_len = payload[pos]
+                pos += 1
+                device = payload[pos:pos + device_len].decode()
+                pos += device_len
                 # Skip MAC
                 mac_len = payload[pos]
                 pos += 1
                 pos += mac_len
-                synced.append(ip)
+                synced.append(device if device else ip)
 
             # Start with device's list, then add any clients we tracked from messages
             # that aren't in device's list (might be timing lag)
             combined = set(synced)
-            for ip in self.wifi_clients:
-                if ip not in synced:
-                    combined.add(ip)
+            for dev in self.wifi_clients:
+                if dev not in synced:
+                    combined.add(dev)
             self.wifi_clients = list(combined)
         except Exception:
             pass
@@ -501,7 +506,8 @@ class TUI:
     def send_espnow_message(self, peer_index, message):
         """Send a message to a specific peer via wireless channel (ESP-NOW or WiFi).
 
-        Payload format: peer_index:u8 + message:string
+        For ESP-NOW: payload = peer_index:u8 + message:string
+        For WiFi: payload = device_id_len:u8 + device_id_bytes + message:bytes
         """
         if self.wireless_channel is None:
             self.last_error = "No wireless channel configured (use -e or -w)"
@@ -517,12 +523,19 @@ class TUI:
             self.last_error = f"Invalid peer index {peer_index}"
             return False
 
-        payload = bytes([peer_index]) + message.encode()
+        if self.use_wifi:
+            device_id = client_list[peer_index]
+            device_bytes = device_id.encode("utf-8")
+            payload = bytes([len(device_bytes)]) + device_bytes + message.encode()
+        else:
+            payload = bytes([peer_index]) + message.encode()
+
         try:
             print(f"DEBUG: Sending to channel {self.wireless_channel}, payload={payload.hex()}")
             self.gateway.send(self.wireless_channel, MSG_COMMAND, payload)
             mode = "WiFi" if self.use_wifi else "ESP-NOW"
-            self.last_action = f"sent via {mode} to peer {peer_index}: {message[:20]}"
+            target = client_list[peer_index] if self.use_wifi else f"peer {peer_index}"
+            self.last_action = f"sent via {mode} to {target}: {message[:20]}"
             return True
         except Exception as e:
             self.last_error = f"Send failed: {e}"
@@ -576,27 +589,24 @@ class TUI:
             return
 
         if channel == CHANNEL_ESPNOW and msg_type == MSG_EVENT:
-            if len(payload) >= 6:
+            if len(payload) >= 1:
                 if self.use_wifi:
-                    # WiFi: payload = IP(4) + message (no peer_index)
-                    mac = payload[:4].hex()
-                    if len(payload) > 4:
-                        data = payload[4:]  # Skip IP, get message
+                    # WiFi: payload = device_id_len:u8 + device_id_bytes + message
+                    device_id_len = payload[0]
+                    if len(payload) >= 1 + device_id_len:
+                        device_id = payload[1:1 + device_id_len].decode("utf-8", "replace")
+                        data = payload[1 + device_id_len:]
                     else:
+                        device_id = ""
                         data = b""
                     rssi_str = ""
 
-                    # Show IP instead of MAC for WiFi
-                    try:
-                        ip_bytes = bytes.fromhex(mac[:8])
-                        client_ip = f"{ip_bytes[0]}.{ip_bytes[1]}.{ip_bytes[2]}.{ip_bytes[3]}"
-                        peer_label = client_ip
+                    # Show device_id instead of IP for WiFi
+                    peer_label = device_id if device_id else "unknown"
 
-                        # Track unique client IPs
-                        if client_ip not in self.wifi_clients:
-                            self.wifi_clients.append(client_ip)
-                    except Exception:
-                        peer_label = mac
+                    # Track unique client device IDs
+                    if device_id and device_id not in self.wifi_clients:
+                        self.wifi_clients.append(device_id)
                 else:
                     # ESP-NOW: payload = MAC(6) + RSSI(1) + data
                     mac = payload[:6].hex()
@@ -673,7 +683,7 @@ class TUI:
 
         if self.input_mode:
             if self.use_wifi:
-                # WiFi mode: use seen client IPs
+                # WiFi mode: use seen client device IDs
                 client_list = self.wifi_clients
             else:
                 # ESP-NOW mode: use peers from file
@@ -681,7 +691,7 @@ class TUI:
 
             if client_list and 0 <= self.input_peer < len(client_list):
                 if self.use_wifi:
-                    peer_label = client_list[self.input_peer]  # IP string
+                    peer_label = client_list[self.input_peer]  # device ID string
                 else:
                     peer_label = client_list[self.input_peer].get("mac", "unknown")
                 line(row, "To peer %d (%s): %s" % (self.input_peer, peer_label, self.input_text))

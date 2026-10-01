@@ -594,11 +594,14 @@ class USBChannelServer:
                 handler = wifi_channel["handler"]
                 if hasattr(handler, "get_client_list"):
                     client_list = handler.get_client_list()
-                    # Encode: count(1) + for each: ip_len(1) + ip_str + mac_len(1) + mac_str
+                    # Encode: count(1) + for each: ip_len(1) + ip_str + device_len(1) + device_str + mac_len(1) + mac_str
                     data = bytes([len(client_list)])
                     for client in client_list:
                         ip_bytes = client["ip"].encode()
                         data += bytes([len(ip_bytes)]) + ip_bytes
+                        device_str = client.get("device", "")
+                        device_bytes = device_str.encode()
+                        data += bytes([len(device_bytes)]) + device_bytes
                         mac_str = client.get("mac", "unknown")
                         mac_bytes = mac_str.encode()
                         data += bytes([len(mac_bytes)]) + mac_bytes

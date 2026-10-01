@@ -7,6 +7,9 @@
 # Connects to the WiFi server (same as the MicroPython wifi_client_example.py)
 # via TCP socket and sends/receives messages.
 #
+# Sends an identification frame (0x00 + device id) immediately after every
+# (re)connect so the server can bind this client to its device id.
+#
 # Usage:
 #   python3 host/wifi_client.py [--server-ip IP] [--port PORT]
 #
@@ -70,7 +73,7 @@ def load_private_config():
 class WiFiClient:
     """TCP client for WiFi server communication."""
 
-    def __init__(self, server_ip, port=8080, shared_key=None):
+    def __init__(self, server_ip, port=8080, shared_key=None, device_id=None):
         self.server_ip = server_ip
         self.port = port
         self.socket = None
@@ -79,20 +82,22 @@ class WiFiClient:
         self._receiver_thread = None
         self._running = False
 
-        # Load shared key from config
+        # Load shared key and device_id from config
+        config_path = os.path.join(os.path.dirname(__file__), "..", "stick", "config.json")
+        config = {}
+        try:
+            if os.path.exists(config_path):
+                with open(config_path, "r") as f:
+                    config = json.load(f)
+        except Exception:
+            pass
+
+        # Load shared key from config or parameter
         if shared_key is None:
-            # Try to load from config.json
-            try:
-                config_path = os.path.join(os.path.dirname(__file__), "..", "stick", "config.json")
-                if os.path.exists(config_path):
-                    with open(config_path, "r") as f:
-                        config = json.load(f)
-                        key_hex = config.get("ble", {}).get("key", "")
-                        if key_hex:
-                            shared_key = bytes.fromhex(key_hex)[:16]
-            except Exception:
-                pass
-        
+            key_hex = config.get("ble", {}).get("key", "")
+            if key_hex:
+                shared_key = bytes.fromhex(key_hex)[:16]
+
         if shared_key is None:
             raise ValueError("No shared key provided")
 
@@ -100,9 +105,17 @@ class WiFiClient:
         if isinstance(shared_key, str):
             shared_key = bytes.fromhex(shared_key[:32])
         self.shared_key = shared_key
+
+        # Load device_id from config or use parameter
+        if device_id is None:
+            device_id = str(config.get("device", ""))
+        if not device_id:
+            device_id = "host"
+        self.device_id = device_id
+        print(f"Using device ID: {self.device_id}")
     
     def connect(self):
-        """Connect to the WiFi server."""
+        """Connect to the WiFi server and identify ourselves."""
         try:
             self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             self.socket.connect((self.server_ip, self.port))
@@ -110,10 +123,28 @@ class WiFiClient:
             self.connected = True
             print(f"Connected to {self.server_ip}:{self.port}")
             self._start_receiver()
-            return True
+            # Send identification immediately after connect
+            return self._send_identification()
         except Exception as e:
             print(f"Connection failed: {e}")
             self.connected = False
+            return False
+
+    def _send_identification(self):
+        """Send identification frame to the server.
+
+        Must be the first frame on every new TCP connection.
+        Format: 0x00 (marker) + device_id (UTF-8 bytes)
+        """
+        if not self.connected or not self.socket:
+            return False
+        try:
+            id_payload = b"\x00" + self.device_id.encode("utf-8")
+            self.socket.send(id_payload)
+            print(f"Sent identification: device {self.device_id}")
+            return True
+        except Exception as e:
+            print(f"Identification send failed: {e}")
             return False
 
     def _start_receiver(self):

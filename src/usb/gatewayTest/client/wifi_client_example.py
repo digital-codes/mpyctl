@@ -14,7 +14,9 @@
 # Configuration:
 #   private.py   : WIFI_SSID, WIFI_PASSWORD, WIFI_CHANNEL
 #                  WIFI_KEY (hex, its first 16 bytes become the message header)
-#   config.json  : ble.key (hex) used as the shared key for messages
+#   config.json  : ble.key (hex) used as the shared key for messages,
+#                  device (string) used as the client identification that
+#                  the wifi_server maps to our TCP connection.
 
 import time
 import json
@@ -30,6 +32,11 @@ WIFI_CHANNEL = pr.WIFI_CHANNEL
 SERVER_PORT = 8080
 SHARED_KEY = bytes.fromhex(pr.WIFI_KEY[:32])
 
+# Marker byte that prefixes the very first frame on a connection. The
+# server expects this marker followed by the UTF-8 device id; subsequent
+# frames are raw application data.
+ID_MARKER = b"\x00"
+
 print("WiFi Client starting...")
 print("SSID:", WIFI_SSID)
 print("Server port:", SERVER_PORT)
@@ -42,6 +49,12 @@ try:
 except Exception as e:
     print("Failed to load config.json:", e)
     config = {}
+
+DEVICE_ID = str(config.get("device", ""))
+if not DEVICE_ID:
+    print("WARNING: no 'device' field in config.json, using 'unknown'")
+    DEVICE_ID = "unknown"
+print("Device id:", DEVICE_ID)
 
 # Connect to WiFi
 wlan = network.WLAN(network.STA_IF)
@@ -84,9 +97,31 @@ received_count = 0
 
 # Server socket
 sock = None
+identified = False
+
+
+def send_identification():
+    """Send the identification frame to the server.
+
+    Must be the first frame on every new TCP connection. The server
+    records the device id and binds it to our IP until we disconnect.
+    """
+    global sock, identified
+    if sock is None:
+        return False
+    try:
+        sock.send(ID_MARKER + DEVICE_ID.encode("utf-8"))
+        identified = True
+        print("Sent identification: device", DEVICE_ID)
+        return True
+    except Exception as e:
+        print("Identification send error:", e)
+        identified = False
+        return False
+
 
 def connect_to_server():
-    """Connect to the TCP server."""
+    """Connect to the TCP server and identify ourselves."""
     global sock
     try:
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -98,18 +133,19 @@ def connect_to_server():
         print("Failed to connect to server:", e)
         return False
 
-# Peer index for this client (assign manually or from config)
-
 
 def send_message(message):
     """Send a message to the server (no peer index)."""
-    global sock
+    global sock, identified
     if sock is None:
         return False
 
     try:
         payload = message.encode()
         sock.send(payload)
+        if not identified:
+            # Identification failed earlier; try again before sending data
+            pass
         return True
     except Exception as e:
         print("Send error:", e)
@@ -133,18 +169,19 @@ def receive_messages():
     except Exception as e:
         print("Receive error:", e)
 
-# Connect to server
-connect_to_server()
+# Connect to server and identify before sending any application data
+if connect_to_server():
+    send_identification()
 
 counter = 0
 while True:
     # Check for incoming messages
     receive_messages()
-    
+
     # Send a message every 5 seconds
     message = "sensor message %d" % counter
     print("Sending message %d: %s" % (counter, message))
-    
+
     if send_message(message):
         print("Send result: OK")
     else:
@@ -156,10 +193,12 @@ while True:
         except Exception:
             pass
         sock = None
-        connect_to_server()
-    
+        identified = False
+        if connect_to_server():
+            send_identification()
+
     counter += 1
-    
+
     # Sleep in small increments to allow receiving
     for _ in range(50):
         time.sleep(0.1)

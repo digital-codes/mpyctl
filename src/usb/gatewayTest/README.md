@@ -28,7 +28,7 @@ stick/                     AtomS3U MicroPython, installed on the board
     wifi_server.py         channel 3, WiFi AP server (bi-directional)
     sensor_test_espnow.py  creates test sensors with ESP-NOW
     sensor_test_wifi.py    creates test sensors with WiFi
-    config.json            shared key, device id, own MAC
+    config.json            shared key, device id (WiFi), own MAC
     private.py             Wi-Fi secrets (see Configuration)
 
 host/                      Linux host applications
@@ -150,11 +150,26 @@ The client sends `sensor message <n>` every 5 seconds.
 - TCP server on port 8080
 - Gateway IP: 192.168.4.1 (always .1 of AP subnet)
 - Security: WPA2 (no shared key needed)
-- No peer management - clients auto-detected by IP address
+- Clients identify themselves with a device id from `config.json` on connect
 
 ### Configuration
 
-WiFi uses the same `config.json` as ESP-NOW. Additional `private.py` settings:
+WiFi uses the same `config.json` as ESP-NOW, with an additional `device` field on each client:
+
+```json
+{
+  "device": "sensor1",
+  "id":  "<device id>",
+  "ble":  {"key": "<32 hex chars = 16-byte shared key>"},
+  "wlan": {"addr": "<own MAC hex>"}
+}
+```
+
+`device` is a free-form string used as a stable client identifier. The
+stick wifi_server maps it to the client's current IP address whenever a
+TCP connection is established.
+
+Additional `private.py` settings:
 
 ```python
 WIFI_SSID = "MPY"
@@ -178,10 +193,11 @@ sensor_test_wifi.run(debug=True)    # Start with debug output
 Copy to a second ESP32 and run:
 - `client/wifi_client_example.py`
 - `stick/private.py`
-- `config.json`
+- `config.json` (must include a `device` field)
 
 Client automatically uses gateway IP from WiFi interface config.
-No peer index needed - server identifies clients by IP address.
+On every new TCP connection the client sends an identification frame
+(`0x00` + `device` string) as the first packet.
 
 ### Running the Client (Linux)
 
@@ -191,19 +207,33 @@ python3 host/wifi_client.py -i wlan0 -c 3         # Send 3 messages
 python3 host/wifi_client.py -i wlan0 -m "hello"    # Single message
 ```
 
+The Linux client also reads the `device` field from `config.json` and
+sends it as the identification frame on connect.
+
 ### Client Identification
 
-WiFi clients are identified by IP address only (not port). When a client disconnects and reconnects:
-- Server tracks by IP string key in `self.clients` dict
-- TUI syncs client list every 5 seconds via `CTRL_GET_WIFI_CLIENTS`
-- TUI also tracks clients from incoming messages
-- Combined list ensures clients aren't lost during brief disconnects
+WiFi clients are identified by their `device` id (not IP, which can
+change when DHCP reassigns addresses). On every new connection:
+
+- Client sends an identification frame: `0x00` (marker) + `device_id` (UTF-8)
+- Server records `device_id <-> IP` in `self.device_by_ip` and
+  `self.ip_by_device` mappings and removes them when the client closes
+- The stick then forwards messages on this connection as USB events whose
+  payload is `device_id_len(1) + device_id_bytes + message`
+- The host `CTRL_GET_WIFI_CLIENTS` response lists each connected client
+  with its current IP and device id; the TUI uses the device id for
+  display and selection
+- Outbound messages from the host carry the same header so the server
+  can resolve the target IP from `device_id`
+
+Clients that do not send a valid identification frame as the first
+packet are dropped (`rejected` counter increments).
 
 ### TUI Usage (WiFi Mode)
 
-- Incoming messages display client IP address
+- Incoming messages display the client device id (from `config.json`)
 - Press `m` to enter message mode
-- Up/Down arrows cycle through seen client IPs
+- Up/Down arrows cycle through seen device ids
 - Press Enter to send, Esc to cancel
 
 The client derives gateway IP (.1 of local subnet) from the specified interface.
@@ -214,11 +244,13 @@ The client derives gateway IP (.1 of local subnet) from the specified interface.
 
 Peer management is used only for ESP-NOW mode:
 
-- Peers defined in `peers.json`: `[{"mac": "<hex>", "lmk": "<hex>"},"device":<integer device number>]`
+- Peers defined in `peers.json`: `[{"device": "<id>", "mac": "<hex>", "lmk": "<hex>"}]`
 - Host loads this file and sends `MSG_PEER_ADD` / `MSG_PEER_DEL` to device
 - Only authorized MAC addresses can communicate via ESP-NOW
+- The `device` field gives each peer a stable id, useful in ESP-NOW mode
+  to address messages without depending on MAC ordering
 
-WiFi mode does not use peer management - any client with the WPA2 password can connect.
+WiFi mode does not use peer management - any client with the WPA2 password can connect. Clients in WiFi mode are identified by the `device` field in their own `config.json` instead.
 
 ---
 
@@ -394,11 +426,15 @@ The USB channel server marks an IN transfer as busy **before** calling `submit_x
 ### config.json (per device)
 ```json
 {
+  "device": "sensor1",
   "id": "device-001",
   "ble": {"key": "00112233445566778899aabbccddeeff"},
   "wlan": {"addr": "aabbccddeeff"}
 }
 ```
+
+The `device` field is used by WiFi clients as their identification on
+the first packet of every TCP connection. ESP-NOW mode ignores it.
 
 ### private.py (per device)
 ```python
@@ -418,7 +454,7 @@ WIFI_KEY = "00112233445566778899aabbccddeeff"
 ### peers.json (optional, for multiple clients)
 ```json
 [
-  {"mac": "aabbccddeeff0011", "lmk": "00112233445566778899aabbccddeeff"}
+  {"device": "1", "mac": "aabbccddeeff0011", "lmk": "00112233445566778899aabbccddeeff"}
 ]
 ```
 

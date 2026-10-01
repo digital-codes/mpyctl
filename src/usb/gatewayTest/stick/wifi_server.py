@@ -7,6 +7,7 @@
 #
 # Configuration lives in /config.json on the device:
 #   {
+#     "device": "<device id string>",
 #     "id":  "<device id>",
 #     "ble":  {"key": "<32 hex chars = 16-byte shared key>"},
 #     "wlan": {"addr": "<own MAC hex>"},
@@ -19,10 +20,20 @@
 # Only clients with MAC addresses registered via enableNode() are accepted.
 # The server listens on port 8080 for TCP connections.
 #
+# Client identification protocol:
+#   - Each client must send an identification packet as the first frame on
+#     a new connection. Format: 0x00 marker + device_id (UTF-8 bytes).
+#   - The server builds an ip -> device_id mapping (also device_id -> ip)
+#     and removes the entry when the client disconnects.
+#
 # Message protocol:
-#   - Each message is prefixed with 16-byte shared key (like ESP-NOW)
-#   - USB event payload = 6-byte source MAC + application data
-#   - Outbound: MSG_COMMAND with peer_index + message (like ESP-NOW)
+#   - After identification, client <-> server messages are raw application
+#     bytes (no peer_index - the TCP connection already identifies the
+#     client).
+#   - USB event payload to host = device_id_len:u8 + device_id_bytes +
+#     application data.
+#   - Outbound from host (MSG_COMMAND) payload = device_id_len:u8 +
+#     device_id_bytes + message bytes.
 
 import os
 import json
@@ -83,10 +94,15 @@ class WiFiServer:
         self.shared_key = None
         self.address = None
         self.authorized_macs = set()  # MAC addresses allowed to connect
-        
+
         # Server socket and client connections
         self.server_socket = None
-        self.clients = {}  # ip_str -> (socket, mac)
+        # ip_str -> (socket, device_id_or_None, awaiting_id)
+        self.clients = {}
+        # ip -> device_id mapping, rebuilt on every (re)connect
+        self.device_by_ip = {}
+        # device_id -> ip mapping for outbound lookup
+        self.ip_by_device = {}
         self.accepting = False
         self.irq_pending = False
         
@@ -247,17 +263,20 @@ class WiFiServer:
     def _close_client(self, client_ip):
         """Close a specific client connection."""
         if client_ip in self.clients:
-            sock, mac = self.clients[client_ip]
+            sock, mac, _awaiting = self.clients[client_ip]
             try:
                 self.poller.unregister(sock)
                 sock.close()
             except Exception:
                 pass
             del self.clients[client_ip]
+            device_id = self.device_by_ip.pop(client_ip, None)
+            if device_id is not None:
+                self.ip_by_device.pop(device_id, None)
             self.disconnected += 1
             if self.debug:
-                print("WiFiServer: Client disconnected: %s (mac: %s)" %
-                      (str(client_ip), mac.hex() if mac else "unknown"))
+                print("WiFiServer: Client disconnected: %s (device: %s)" %
+                      (str(client_ip), device_id if device_id else "unknown"))
 
     def enableNode(self, mac, lmk=None):
         """Authorize a client MAC address to connect.
@@ -290,12 +309,12 @@ class WiFiServer:
             return 0
         
         self.authorized_macs.discard(mac_bytes)
-        
+
         # Disconnect if connected - find by MAC
-        for client_ip, (sock, m) in list(self.clients.items()):
+        for client_ip, (sock, m, _awaiting) in list(self.clients.items()):
             if m == mac_bytes:
                 self._close_client(client_ip)
-        
+
         print("WiFiServer: Removed MAC:", mac_bytes.hex())
         return 1
 
@@ -325,7 +344,7 @@ class WiFiServer:
 
         # Re-register server socket and all client sockets
         self.poller.register(self.server_socket, select.POLLIN)
-        for client_ip, (sock, mac) in self.clients.items():
+        for client_ip, (sock, _mac, _awaiting) in self.clients.items():
             self.poller.register(sock, select.POLLIN)
 
         # Wait for events
@@ -337,7 +356,7 @@ class WiFiServer:
         for sock, event in events:
             if event & (select.POLLHUP | select.POLLERR):
                 # Find and close the socket
-                for client_ip, (client_sock, mac) in list(self.clients.items()):
+                for client_ip, (client_sock, _mac, _awaiting) in list(self.clients.items()):
                     if client_sock is sock:
                         if self.debug:
                             print("WiFiServer: Socket error/hup for %s" % str(client_ip))
@@ -357,19 +376,25 @@ class WiFiServer:
                         print("WiFiServer: ERROR - accept:", e)
             else:
                 # Client socket has data
-                for client_ip, (client_sock, mac) in list(self.clients.items()):
+                for client_ip, (client_sock, _mac, _awaiting) in list(self.clients.items()):
                     if client_sock is sock:
                         self._check_client_data(client_ip)
                         break
 
     def _handle_new_connection(self, sock, addr):
-        """Handle a new TCP connection."""
+        """Handle a new TCP connection.
+
+        The first frame on the connection MUST be the identification packet
+        (0x00 + device_id). Until it is received the client stays in the
+        awaiting_id state and any data is rejected as a malformed first
+        frame.
+        """
         client_ip = addr[0]  # Use IP only, not (IP, port)
         if self.debug:
             print("WiFiServer: New connection from %s" % str(client_ip))
 
-        # Accept all connections initially, verify MAC on first data
-        self.clients[client_ip] = (sock, None)
+        # Accept all connections initially, expect identification first.
+        self.clients[client_ip] = (sock, None, True)
         self.connected += 1
 
         # Register client socket for reading
@@ -403,7 +428,9 @@ class WiFiServer:
     def _handle_client_data(self, client_ip, data):
         """Process data received from a client.
 
-        Expected format: peer_index(1) + message (no shared key - WPA security)
+        The first frame on a new connection must be the identification
+        packet: 0x00 (marker) + device_id (UTF-8 bytes). Subsequent
+        frames carry raw application data.
         """
         if self.debug:
             print("WiFiServer: ============================================")
@@ -418,36 +445,54 @@ class WiFiServer:
             self.rejected += 1
             return
 
-        # Extract peer_index and message from payload
-        # Format: peer_index(1) + message
-        peer_index = data[0]
-        message = data[1:]
+        sock, client_device, awaiting_id = self.clients[client_ip]
+
+        if awaiting_id:
+            # Identification packet: 0x00 + device_id
+            if len(data) < 2 or data[0] != 0x00:
+                if self.debug:
+                    print("WiFiServer: ERROR - first packet not identification")
+                self.rejected += 1
+                self._close_client(client_ip)
+                return
+
+            device_id = data[1:].decode("utf-8", "replace")
+            if not device_id:
+                if self.debug:
+                    print("WiFiServer: ERROR - empty device id")
+                self.rejected += 1
+                self._close_client(client_ip)
+                return
+
+            # Drop any stale mapping from a previous session of this IP.
+            old_device = self.device_by_ip.pop(client_ip, None)
+            if old_device is not None:
+                self.ip_by_device.pop(old_device, None)
+
+            self.device_by_ip[client_ip] = device_id
+            self.ip_by_device[device_id] = client_ip
+            self.clients[client_ip] = (sock, device_id, False)
+
+            if self.debug:
+                print("WiFiServer: Client %s identified as device %s" %
+                      (str(client_ip), device_id))
+            return
+
+        # Regular message: raw bytes (no peer_index - TCP identifies client)
+        message = data
 
         if self.debug:
-            print("WiFiServer: Peer index: %d" % peer_index)
-            print("WiFiServer: Message:", message)
-
-        if self.debug:
-            print("WiFiServer: Peer index: %d" % peer_index)
-            print("WiFiServer: Message:", message)
+            print("WiFiServer: Data from %s (device %s): %s" %
+                  (str(client_ip), client_device, message))
             try:
                 print("WiFiServer: Message decode:", message.decode('utf-8'))
             except Exception as e:
                 print("WiFiServer: Message decode error:", e)
 
-        # If MAC is None, use IP as identifier (4 bytes)
-        sock, client_mac = self.clients[client_ip]
-        if client_mac is None:
-            # Encode client IP as 4-byte identifier
-            ip_parts = client_ip.split('.')
-            client_mac = bytes([int(x) for x in ip_parts])
-
-        if self.debug:
-            print("WiFiServer: Data from %s: %s" % (str(client_ip), message))
-        
-        # Forward to USB gateway
+        # Forward to USB gateway as device_id + message
         if self.gateway:
-            payload = client_mac + message
+            device_bytes = client_device.encode("utf-8") if client_device else b""
+            payload = bytes([len(device_bytes)]) + device_bytes + message
             if self.gateway.send(
                 self.channel_id,
                 MSG_EVENT,
@@ -464,7 +509,7 @@ class WiFiServer:
     def _handle_outbound(self, msg_type, payload):
         """Handle outbound messages from the host.
 
-        MSG_COMMAND payload: peer_index:u8 + message:string
+        MSG_COMMAND payload: device_id_len:u8 + device_id_bytes + message_bytes
 
         Returns:
             1 on success
@@ -476,36 +521,27 @@ class WiFiServer:
 
         if msg_type == MSG_COMMAND:
             if len(payload) < 1:
-                print("WiFiServer: ERROR - no peer index")
+                print("WiFiServer: ERROR - no device id length")
                 return -1
 
-            peer_index = payload[0]
-            message = payload[1:].decode("utf-8", "replace")
+            device_id_len = payload[0]
+            if len(payload) < 1 + device_id_len:
+                print("WiFiServer: ERROR - truncated device id")
+                return -1
 
-            # Get list of connected client addresses
-            client_addrs = list(self.clients.keys())
+            device_id = payload[1:1 + device_id_len].decode("utf-8", "replace")
+            message_bytes = payload[1 + device_id_len:]
 
-            if not client_addrs:
-                print("WiFiServer: ERROR - no clients connected")
+            client_ip = self.ip_by_device.get(device_id)
+            if client_ip is None or client_ip not in self.clients:
+                print("WiFiServer: ERROR - device %s not connected" % device_id)
                 return -2
 
             if self.debug:
-                print("WiFiServer: DEBUG - client_addrs =", client_addrs)
-                print("WiFiServer: DEBUG - peer_index =", peer_index)
+                print("WiFiServer: Sending to device %s (%s): %s" %
+                      (device_id, str(client_ip), message_bytes))
 
-            if peer_index >= len(client_addrs):
-                print("WiFiServer: ERROR - invalid peer index %d (max %d)" %
-                      (peer_index, len(client_addrs) - 1))
-                return -3
-
-            client_ip = client_addrs[peer_index]
-            # Send message (no peer index)
-            full_message = message.encode()
-
-            if self.debug:
-                print("WiFiServer: Sending to peer %d (%s): %s" % (peer_index, str(client_ip), message))
-
-            result = self._send_to_client(client_ip, full_message)
+            result = self._send_to_client(client_ip, message_bytes)
             return result
 
         print("WiFiServer: ERROR - unknown msg_type %d" % msg_type)
@@ -529,7 +565,7 @@ class WiFiServer:
             print("  Length:", len(message))
 
         try:
-            sock, mac = self.clients[client_ip]
+            sock, _mac, _awaiting = self.clients[client_ip]
             sent = sock.send(message)
             if sent == len(message):
                 self.sent += 1
@@ -573,12 +609,13 @@ class WiFiServer:
         return len(self.clients)
 
     def get_client_list(self):
-        """Return list of connected clients with IP address."""
+        """Return list of connected clients with IP and device id."""
         result = []
-        for client_ip, (sock, mac) in self.clients.items():
+        for client_ip, (sock, device_id, _awaiting) in self.clients.items():
             result.append({
                 "ip": client_ip,
-                "mac": mac.hex() if mac else "unknown"
+                "device": device_id if device_id else "",
+                "mac": "",
             })
         return result
 

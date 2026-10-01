@@ -604,8 +604,8 @@ class FakeGateway:
 ws = wifi_server.WiFiServer(channel_id=3, debug=False)
 ws.gateway = FakeGateway()
 
-ws.clients["192.168.4.2"] = (None, None)
-ws.clients["192.168.4.3"] = (None, None)
+ws.clients["192.168.4.2"] = (None, "device1", False)
+ws.clients["192.168.4.3"] = (None, "device2", False)
 
 assert len(ws.clients) == 2
 assert "192.168.4.2" in ws.clients
@@ -613,9 +613,37 @@ assert "192.168.4.3" in ws.clients
 
 client_list = ws.get_client_list()
 ips = [c["ip"] for c in client_list]
+devices = [c["device"] for c in client_list]
 assert "192.168.4.2" in ips
 assert "192.168.4.3" in ips
+assert "device1" in devices
+assert "device2" in devices
 debug("WiFi client tracking test passed")
+
+debug("Testing identification packet handling...")
+
+# New connection starts awaiting identification
+ws.clients["192.168.4.4"] = (None, None, True)
+# Send a non-identification packet -> client should be rejected
+ws._handle_client_data("192.168.4.4", b"junk")
+assert "192.168.4.4" not in ws.clients
+debug("WiFi identification rejection passed")
+
+# Accept identification packet: 0x00 + device_id
+ws.clients["192.168.4.5"] = (None, None, True)
+ws._handle_client_data("192.168.4.5", b"\x00device3")
+assert ws.clients["192.168.4.5"][1] == "device3"
+assert ws.clients["192.168.4.5"][2] == False
+assert ws.device_by_ip["192.168.4.5"] == "device3"
+assert ws.ip_by_device["device3"] == "192.168.4.5"
+debug("WiFi identification acceptance passed")
+
+# Outbound lookup: device_id resolves to IP via ip_by_device
+assert ws.ip_by_device["device3"] == "192.168.4.5"
+# Unknown device_id returns -2 (no socket call made)
+result = ws._handle_outbound(ucs.MSG_COMMAND, bytes([len(b"ghost")]) + b"ghost" + b"hi")
+assert result == -2
+debug("WiFi outbound lookup passed")
 
 debug("Testing TUI WiFi client handling...")
 
@@ -623,20 +651,28 @@ tui = sensor_tui.TUI(None, use_wifi=True)
 assert tui.use_wifi == True
 assert tui.wifi_clients == []
 
-test_payload = bytes([192, 168, 4, 2]) + b"hello world"
+# New payload format: device_id_len(1) + device_id + message
+device_id = b"device1"
+test_payload = bytes([len(device_id)]) + device_id + b"hello world"
 tui.handle_frame(3, ucs.MSG_EVENT, test_payload)
 
-assert "192.168.4.2" in tui.wifi_clients
+assert "device1" in tui.wifi_clients
 debug("TUI WiFi client handling test passed")
 
 debug("Testing TUI WiFi client list sync...")
 
-# Build sync payload: count(1) + ip_len(1) + ip + mac_len(1) + mac
-sync_payload = bytes([1]) + bytes([11]) + b'192.168.4.3' + bytes([7]) + b'unknown'
+# Build sync payload: count(1) + for each: ip_len + ip + device_len + device + mac_len + mac
+ip_bytes = b"192.168.4.3"
+device_bytes = b"device2"
+mac_bytes = b"unknown"
+sync_payload = bytes([1])
+sync_payload += bytes([len(ip_bytes)]) + ip_bytes
+sync_payload += bytes([len(device_bytes)]) + device_bytes
+sync_payload += bytes([len(mac_bytes)]) + mac_bytes
 tui._parse_wifi_clients(sync_payload)
 
-assert "192.168.4.2" in tui.wifi_clients
-assert "192.168.4.3" in tui.wifi_clients
+assert "device1" in tui.wifi_clients
+assert "device2" in tui.wifi_clients
 debug("TUI WiFi client sync test passed")
 
 print("PASS: All WiFi-specific tests passed")
