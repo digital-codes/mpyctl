@@ -847,7 +847,7 @@ class USBChannelServer:
         },
         CHANNEL_WIFI: {
             "module": "wifi_server",
-            "class": "WiFiRadio",
+            "class": "WiFiServer",
             "config_parser": None,
         },
     }
@@ -880,7 +880,7 @@ class USBChannelServer:
 
         module = __import__(entry["module"])
         cls = getattr(module, entry["class"])
-        sensor = cls(**kwargs)
+        sensor = cls(channel_id=channel_id, **kwargs)
 
         if hasattr(sensor, "start"):
             sensor.start()
