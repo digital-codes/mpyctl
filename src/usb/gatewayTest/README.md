@@ -9,7 +9,9 @@ The AtomS3U USB Sensor Gateway provides two wireless communication options:
 1. **ESP-NOW** - Low-power peer-to-peer communication
 2. **WiFi AP** - Access point mode with TCP sockets
 
-Both use channel 3 on the USB interface and share the same message protocol.
+Each mode uses its own USB channel: ESP-NOW on channel 3 (`CHANNEL_ESPNOW`)
+and WiFi on channel 4 (`CHANNEL_WIFI`). They share the same message
+protocol but cannot be active concurrently on the same device.
 
 ---
 
@@ -25,7 +27,7 @@ stick/                     AtomS3U MicroPython, installed on the board
     button_sensor.py       channel 1, GPIO41 input
     rgb_sensor.py          channel 2, GPIO35 NeoPixel output
     espnow_server.py       channel 3, ESP-NOW radio (bi-directional)
-    wifi_server.py         channel 3, WiFi AP server (bi-directional)
+    wifi_server.py         channel 4, WiFi AP server (bi-directional)
     sensor_test_espnow.py  creates test sensors with ESP-NOW
     sensor_test_wifi.py    creates test sensors with WiFi
     config.json            shared key, device id (WiFi), own MAC
@@ -146,7 +148,7 @@ The client sends `sensor message <n>` every 5 seconds.
 
 ### How It Works
 
-- Creates Access Point: SSID "MPY", password from `private.py`, channel 3
+- Creates Access Point: SSID "MPY", password from `private.py`, WiFi RF channel 3
 - TCP server on port 8080
 - Gateway IP: 192.168.4.1 (always .1 of AP subnet)
 - Security: WPA2 (no shared key needed)

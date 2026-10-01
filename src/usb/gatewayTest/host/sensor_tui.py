@@ -824,12 +824,12 @@ def main():
     parser.add_argument(
         "-e", "--espnow",
         action="store_true",
-        help="Use ESP-NOW radio (channel 3)"
+        help="Use ESP-NOW radio (USB channel 3)"
     )
     parser.add_argument(
         "-w", "--wifi",
         action="store_true",
-        help="Use WiFi server (channel 3)"
+        help="Use WiFi server (USB channel 4)"
     )
     args = parser.parse_args()
 
