@@ -214,7 +214,7 @@ The client derives gateway IP (.1 of local subnet) from the specified interface.
 
 Peer management is used only for ESP-NOW mode:
 
-- Peers defined in `peers.json`: `[{"mac": "<hex>", "lmk": "<hex>"}]`
+- Peers defined in `peers.json`: `[{"mac": "<hex>", "lmk": "<hex>"},"device":<integer device number>]`
 - Host loads this file and sends `MSG_PEER_ADD` / `MSG_PEER_DEL` to device
 - Only authorized MAC addresses can communicate via ESP-NOW
 
@@ -428,9 +428,9 @@ WIFI_KEY = "00112233445566778899aabbccddeeff"
 
 The gateway supports filesystem operations on the device, similar to `mpremote` commands. These are implemented via the control channel using `MSG_COMMAND` with `CTRL_FS_*` commands. Large files are transferred in 960-byte chunks.
 
-### Host Tool: fs_test.py
+### Host Tool: fs_util.py
 
-Run with: `python3 host/fs_test.py <command> [options]`
+Run with: `python3 host/fs_util.py <command> [options]`
 
 Commands:
 - `ls [path]` - List directory contents (like `mpremote ls`)
@@ -445,15 +445,15 @@ Options:
 
 Examples:
 ```bash
-python3 host/fs_test.py ls /                # List root directory
-python3 host/fs_test.py ls /flash           # List flash filesystem
-python3 host/fs_test.py cat /main.py        # Read text file to stdout
-python3 host/fs_test.py cat /image.bin -o local.bin  # Save binary file locally
-python3 host/fs_test.py put local.py /main.py  # Write file to device
-python3 host/fs_test.py put local.bin /data.bin  # Write binary file (images, etc)
-python3 host/fs_test.py rm /test.py         # Delete file from device
-python3 host/fs_test.py exists /boot.py     # Check if file exists
-python3 host/fs_test.py reset               # Reset the device
+python3 host/fs_util.py ls /                # List root directory
+python3 host/fs_util.py ls /flash           # List flash filesystem
+python3 host/fs_util.py cat /main.py        # Read text file to stdout
+python3 host/fs_util.py cat /image.bin -o local.bin  # Save binary file locally
+python3 host/fs_util.py put local.py /main.py  # Write file to device
+python3 host/fs_util.py put local.bin /data.bin  # Write binary file (images, etc)
+python3 host/fs_util.py rm /test.py         # Delete file from device
+python3 host/fs_util.py exists /boot.py     # Check if file exists
+python3 host/fs_util.py reset               # Reset the device
 ```
 
 ### Protocol
