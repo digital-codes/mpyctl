@@ -406,7 +406,7 @@ class WiFiServer:
         if client_ip not in self.clients:
             return
 
-        sock, client_mac = self.clients[client_ip]
+        sock, client_mac, _awaiting = self.clients[client_ip]
         try:
             sock.settimeout(0)  # Non-blocking for MicroPython
             data = sock.recv(1024)
