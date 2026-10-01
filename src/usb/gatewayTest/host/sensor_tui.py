@@ -59,6 +59,7 @@ from channel_defs import (
     CHANNEL_BUTTON,
     CHANNEL_RGB,
     CHANNEL_ESPNOW,
+    CHANNEL_WIFI,
 )
 
 VID = 0x303A
@@ -367,8 +368,12 @@ class TUI:
         self.use_wifi = use_wifi
         self.use_espnow = use_espnow
         # Determine which channel to use for messaging
-        # WiFi and ESP-NOW both use channel 3
-        self.wireless_channel = CHANNEL_ESPNOW if (use_wifi or use_espnow) else None
+        if use_wifi:
+            self.wireless_channel = CHANNEL_WIFI
+        elif use_espnow:
+            self.wireless_channel = CHANNEL_ESPNOW
+        else:
+            self.wireless_channel = None
         self.shutdown = threading.Event()
         self.channels = {}
         self.button = "unknown"
