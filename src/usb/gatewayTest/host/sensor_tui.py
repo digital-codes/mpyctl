@@ -593,7 +593,7 @@ class TUI:
                 self.rgb = tuple(payload)
             return
 
-        if channel == CHANNEL_ESPNOW and msg_type == MSG_EVENT:
+        if channel in (CHANNEL_ESPNOW, CHANNEL_WIFI) and msg_type == MSG_EVENT:
             if len(payload) >= 1:
                 if self.use_wifi:
                     # WiFi: payload = device_id_len:u8 + device_id_bytes + message
