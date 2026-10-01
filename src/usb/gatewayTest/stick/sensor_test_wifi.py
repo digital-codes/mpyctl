@@ -54,7 +54,7 @@ def run(items=("button", "rgb", "wifi"), debug=False):
             print("sensor_test_wifi: Creating WiFi server on channel %d" % CHANNEL_WIFI)
             wifi = WiFiServer(CHANNEL_WIFI, debug=debug)
             print("sensor_test_wifi: WiFi server created, starting server...")
-            wifi.start_server()
+            wifi.start()
             created.append(wifi)
             
             # Print initial stats

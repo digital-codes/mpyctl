@@ -207,7 +207,7 @@ class WiFiServer:
         # Bind socket to the actual IP
         print("WiFiServer: Server will bind to IP:", self.server_ip)
 
-    def start_server(self):
+    def start(self):
         """Start accepting TCP connections."""
         if self.server_socket is not None:
             return
@@ -664,7 +664,7 @@ if __name__ == "__main__":
     server.enableNode(test_mac)
     
     # Start accepting connections
-    server.start_server()
+    server.start()
     
     print("WiFiServer: AP running, SSID:", server.ssid)
     print("WiFiServer: Server IP:", server.server_ip)
