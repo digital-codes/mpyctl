@@ -35,13 +35,13 @@ class WieseLora:
             bat_voltage = self.get_battery_voltage()
             if self.debug:
                 print("Battery voltage: {:.2f} V".format(bat_voltage))
-            if bat_voltage < 3.5:
-                print("Battery voltage below 3.5V, entering deep sleep for 1 hour to save power.")
+            if bat_voltage < 3.2:
+                print("Battery voltage below 3.2V, entering deep sleep for 1 hour to save power.")
                 deepsleep(60 * 60 * 1000)  # Convert seconds to milliseconds for deep sleep
                 # this gives a reset after 1 hour, and the code will start from the beginning, checking battery voltage again.
-            elif bat_voltage < 3.8:
-                print("Battery voltage below 3.8V, entering sleep for 30 minutes to save power.")
-                time.sleep(30 * 60)  # Convert seconds to seconds
+            elif bat_voltage < 3.4:
+                print("Battery voltage below 3.4V, entering sleep for 30 minutes to save power.")
+                time.sleep(30 * 60)  # sleep
             else:
                 bat_ok = True
         
