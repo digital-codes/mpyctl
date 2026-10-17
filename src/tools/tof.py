@@ -118,6 +118,8 @@ class VL53L0X:
         self.init()
         self._started = False
         self.measurement_timing_budget_us = 0
+        self._continuous_mode = False
+        self._data_ready = False
         self.set_measurement_timing_budget(self.measurement_timing_budget_us)
         self.enables = {"tcc": 0,
                         "dss": 0,
@@ -648,3 +650,4 @@ class VL53L0X:
         self._register(SYSTEM_INTERRUPT_CLEAR, 0x01)
         self._register(SYSRANGE_START, 0x00)
         return True
+    

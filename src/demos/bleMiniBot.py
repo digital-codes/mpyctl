@@ -23,8 +23,16 @@ import math
 import mpu6886
 
 # tof
-from tof import ToFUnit
-
+try:
+    from tof import ToFUnit
+    print("Imported TofUnit")
+except:
+    print("No ToFunit")
+    try:
+        from tof import VL53L0X as ToFUnit
+        print("Imported VL53L0X")
+    except:
+        print("No VL53L0X either")
 
 # config stuff
 _CONF_FILE = "config.json"
@@ -209,8 +217,12 @@ liftAction(0)
 distSensor = None
 try:
     i2c2 = machine.I2C(1,scl=machine.Pin(cfdata["io"]["pin"][2]),sda=machine.Pin(cfdata["io"]["pin"][3]),freq=400000)
+    # scanning devices on i2c2
+    print("I2C2",cfdata["io"]["pin"][2],cfdata["io"]["pin"][3])
+    print("Devs2:",i2c2.scan())
     assert 0x29 in i2c2.scan()
     distSensor = ToFUnit(i2c2)
+    distSensor.start()
     print("TOF OK")
 except:
     print("No TOF")
@@ -528,7 +540,7 @@ async def sensor_task():
             # print("Imu ...")
             try:
                 if distSensor != None:
-                    dist = round(distSensor.get_distance())
+                    dist = round(distSensor.read()) # get_distance())
                     dist = 100 if dist > 100 else dist
                 else:
                     dist = 0
